@@ -1,6 +1,7 @@
 import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import {
   BarChart3,
+  CalendarDays,
   Calculator,
   ChevronDown,
   HeartHandshake,
@@ -12,6 +13,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { AdminPage } from "./pages/AdminPage";
+import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -93,6 +95,22 @@ function AppShell({ children }: { children: React.ReactNode }) {
             <BarChart3 aria-hidden="true" />
             ダッシュボード
           </NavLink>
+          <details
+            className="nav-group"
+            open={location.pathname.startsWith("/analytics")}
+          >
+            <summary>
+              <BarChart3 aria-hidden="true" />
+              分析
+              <ChevronDown className="nav-chevron" aria-hidden="true" />
+            </summary>
+            <div className="nav-sublist">
+              <NavLink to="/analytics/period">
+                <CalendarDays aria-hidden="true" />
+                期間
+              </NavLink>
+            </div>
+          </details>
           <details
             className="nav-group"
             open={location.pathname.startsWith("/settings")}
@@ -203,6 +221,18 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route
+        path="/analytics"
+        element={<Navigate to="/analytics/period" replace />}
+      />
+      <Route
+        path="/analytics/period"
+        element={
+          <RequireAuth>
+            <AnalyticsPage />
+          </RequireAuth>
+        }
+      />
       <Route
         path="/admin"
         element={<Navigate to="/admin/account" replace />}

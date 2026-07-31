@@ -529,7 +529,7 @@ export function DashboardPage() {
             type="button"
           >
             <Sparkles aria-hidden="true" />
-            <span>{submitting ? "登録中..." : "ありがとうをもらったよ"}</span>
+            <span>{submitting ? "登録中..." : "ありがとうをいただきました"}</span>
           </button>
         </div>
         <div
