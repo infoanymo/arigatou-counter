@@ -80,6 +80,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setLoading(true);
     const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (session) {
+      await supabase.auth.refreshSession();
+    }
+
+    const {
       data: { user: currentUser },
       error,
     } = await supabase.auth.getUser();

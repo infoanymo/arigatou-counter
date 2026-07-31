@@ -283,23 +283,26 @@ export function AdminPage() {
       return;
     }
 
-    const client = getSupabase();
     setSavingAdjustment(true);
     setMessage(null);
 
-    const { error } = await client.from("thank_you_adjustments").insert({
-      period_id: periodForm.id,
-      delta,
-      reason: adjustmentReason.trim() || null,
-    });
-
-    if (error) {
-      setMessage("補正を登録できませんでした。管理者権限を確認してください。");
-    } else {
+    try {
+      await invokeAdmin({
+        action: "adjust-thank-you",
+        periodId: periodForm.id,
+        delta,
+        reason: adjustmentReason.trim() || null,
+      });
       setAdjustmentDelta("");
       setAdjustmentReason("");
       setMessage("ありがとう件数を補正しました。");
       await loadAdjustmentSummary(periodForm.id);
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "補正を登録できませんでした。管理者権限を確認してください。",
+      );
     }
 
     setSavingAdjustment(false);

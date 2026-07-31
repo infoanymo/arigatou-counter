@@ -36,6 +36,17 @@ function cleanStatus(value: unknown): Status | null {
   return null;
 }
 
+function cleanInteger(value: unknown): number | null {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value.trim())
+        : NaN;
+
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
 function siteUrl(req: Request) {
   const configuredUrl = Deno.env.get("APP_URL")?.trim();
   if (configuredUrl) return configuredUrl.replace(/\/$/, "");
@@ -258,6 +269,36 @@ Deno.serve(async (req) => {
       .from("profiles")
       .update({ status })
       .eq("id", userId);
+
+    if (error) return json({ error: error.message }, 400);
+    return json({ ok: true });
+  }
+
+  if (action === "adjust-thank-you") {
+    const periodId = cleanText(body.periodId);
+    const delta = cleanInteger(body.delta);
+    const reason = cleanText(body.reason) || null;
+
+    if (!periodId || !delta || delta === 0) {
+      return json({ error: "Valid period id and non-zero delta are required." }, 400);
+    }
+
+    const { data: period, error: periodError } = await admin
+      .from("periods")
+      .select("id,is_active")
+      .eq("id", periodId)
+      .single();
+
+    if (periodError || !period?.is_active) {
+      return json({ error: "Active period not found." }, 404);
+    }
+
+    const { error } = await admin.from("thank_you_adjustments").insert({
+      period_id: periodId,
+      admin_user_id: caller.id,
+      delta,
+      reason,
+    });
 
     if (error) return json({ error: error.message }, 400);
     return json({ ok: true });
