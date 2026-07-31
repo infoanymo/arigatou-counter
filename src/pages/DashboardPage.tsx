@@ -217,6 +217,7 @@ export function DashboardPage() {
     [events, user?.id],
   );
   const progress = period ? Math.min(100, (total / period.target_count) * 100) : 0;
+  const roundedProgress = Math.round(progress);
   const progressDegrees = Math.round((progress / 100) * 360);
 
   const ranking = useMemo(() => {
@@ -344,9 +345,9 @@ export function DashboardPage() {
         <div
           className="progress-ring"
           style={{ "--progress": `${progressDegrees}deg` } as React.CSSProperties}
-          aria-label={`達成率 ${Math.round(progress)} パーセント`}
+          aria-label={`達成率 ${formatNumber(roundedProgress)} パーセント`}
         >
-          <span>{Math.round(progress)}%</span>
+          <span>{formatNumber(roundedProgress)}%</span>
         </div>
       </section>
 
@@ -396,7 +397,9 @@ export function DashboardPage() {
         <div className="stat-tile">
           <Trophy aria-hidden="true" />
           <span>期末まで</span>
-          <strong>{period ? `${daysUntil(period.ends_on)}日` : "-"}</strong>
+          <strong>
+            {period ? `${formatNumber(daysUntil(period.ends_on))}日` : "-"}
+          </strong>
         </div>
       </section>
 
@@ -413,7 +416,7 @@ export function DashboardPage() {
             {ranking.length ? (
               ranking.map((entry, index) => (
                 <li key={entry.userId}>
-                  <span className="rank-number">{index + 1}</span>
+                  <span className="rank-number">{formatNumber(index + 1)}</span>
                   <div>
                     <strong>{entry.name}</strong>
                     <span>{formatDateTime(entry.lastAt)} 更新</span>

@@ -13,7 +13,7 @@ import type {
   ProfileStatus,
   ThankYouAdjustment,
 } from "../lib/database.types";
-import { formatDateTime } from "../lib/format";
+import { formatDateTime, formatNumber } from "../lib/format";
 import { getSupabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 
@@ -41,6 +41,19 @@ type AdjustmentWithProfile = ThankYouAdjustment & {
 
 const today = new Date().toISOString().slice(0, 10);
 
+function parseIntegerInput(value: string) {
+  return Number(value.replace(/,/g, ""));
+}
+
+function formatIntegerInput(value: string, signed = false) {
+  const trimmed = value.trim();
+  const sign = signed && /^[+-]/.test(trimmed) ? trimmed[0] : "";
+  const digits = trimmed.replace(/\D/g, "");
+
+  if (!digits) return sign;
+  return `${sign}${formatNumber(Number(digits))}`;
+}
+
 function defaultPeriodForm(): PeriodForm {
   const end = new Date();
   end.setMonth(end.getMonth() + 3);
@@ -50,7 +63,7 @@ function defaultPeriodForm(): PeriodForm {
     name: "今期",
     starts_on: today,
     ends_on: end.toISOString().slice(0, 10),
-    target_count: "1000",
+    target_count: formatNumber(1000),
   };
 }
 
@@ -61,7 +74,7 @@ function formFromPeriod(period: Period | null): PeriodForm {
     name: period.name,
     starts_on: period.starts_on,
     ends_on: period.ends_on,
-    target_count: String(period.target_count),
+    target_count: formatNumber(period.target_count),
   };
 }
 
@@ -197,7 +210,7 @@ export function AdminPage() {
   async function handlePeriodSave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const client = getSupabase();
-    const target = Number(periodForm.target_count);
+    const target = parseIntegerInput(periodForm.target_count);
 
     if (!Number.isInteger(target) || target <= 0) {
       setMessage("目標数は1以上の整数で入力してください。");
@@ -264,7 +277,7 @@ export function AdminPage() {
       return;
     }
 
-    const delta = Number(adjustmentDelta);
+    const delta = parseIntegerInput(adjustmentDelta);
     if (!Number.isInteger(delta) || delta === 0) {
       setMessage("補正数は0以外の整数で入力してください。");
       return;
@@ -394,8 +407,14 @@ export function AdminPage() {
                     target_count: event.target.value,
                   }))
                 }
+                onBlur={() =>
+                  setPeriodForm((current) => ({
+                    ...current,
+                    target_count: formatIntegerInput(current.target_count),
+                  }))
+                }
                 required
-                type="number"
+                type="text"
                 value={periodForm.target_count}
               />
             </label>
@@ -464,18 +483,18 @@ export function AdminPage() {
           <div className="adjustment-summary" aria-label="ありがとう件数の内訳">
             <div>
               <span>押下数</span>
-              <strong>{eventCount.toLocaleString("ja-JP")}</strong>
+              <strong>{formatNumber(eventCount)}</strong>
             </div>
             <div>
               <span>補正</span>
               <strong>
                 {adjustmentTotal > 0 ? "+" : ""}
-                {adjustmentTotal.toLocaleString("ja-JP")}
+                {formatNumber(adjustmentTotal)}
               </strong>
             </div>
             <div>
               <span>表示総数</span>
-              <strong>{adjustedTotal.toLocaleString("ja-JP")}</strong>
+              <strong>{formatNumber(adjustedTotal)}</strong>
             </div>
           </div>
           <form className="form-stack" onSubmit={handleAdjustmentSave}>
@@ -484,7 +503,10 @@ export function AdminPage() {
               <input
                 inputMode="numeric"
                 onChange={(event) => setAdjustmentDelta(event.target.value)}
-                placeholder="+10 / -3"
+                onBlur={() =>
+                  setAdjustmentDelta((current) => formatIntegerInput(current, true))
+                }
+                placeholder="+1,000 / -300"
                 required
                 type="text"
                 value={adjustmentDelta}
@@ -512,7 +534,7 @@ export function AdminPage() {
                 <div className="adjustment-row" key={item.id}>
                   <strong>
                     {item.delta > 0 ? "+" : ""}
-                    {item.delta.toLocaleString("ja-JP")}
+                    {formatNumber(item.delta)}
                   </strong>
                   <div>
                     <span>
