@@ -1,7 +1,6 @@
 import confetti from "canvas-confetti";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity,
   Crown,
   HeartHandshake,
   Radio,
@@ -369,8 +368,10 @@ export function DashboardPage() {
 
       <section className="action-band">
         <div>
-          <p className="eyebrow">One Click</p>
-          <h2>ありがとうをもらったよ</h2>
+          <p className="eyebrow">Object</p>
+          <h2>
+            一人でも多くの人の日常をアップデートすることで、「オーキ製薬に出会えてよかった」を溢れさせる
+          </h2>
           <p>
             {profile?.display_name || user?.email || "あなた"}さんの今期カウント:
             <strong> {formatNumber(myCount)} </strong>件
@@ -400,14 +401,6 @@ export function DashboardPage() {
           <span>残り目標</span>
           <strong>
             {period ? formatNumber(Math.max(0, period.target_count - total)) : "-"}
-          </strong>
-        </div>
-        <div className="stat-tile">
-          <Activity aria-hidden="true" />
-          <span>管理補正</span>
-          <strong>
-            {adjustmentTotal > 0 ? "+" : ""}
-            {formatNumber(adjustmentTotal)}
           </strong>
         </div>
         <div className="stat-tile">
