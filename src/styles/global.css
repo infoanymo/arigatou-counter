@@ -118,6 +118,8 @@ p {
 
 .brand-lockup.compact {
   align-items: center;
+  justify-content: center;
+  width: 100%;
 }
 
 .brand-lockup.compact strong {
