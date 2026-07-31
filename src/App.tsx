@@ -21,6 +21,7 @@ import { useAuth } from "./lib/auth";
 import type { Profile } from "./lib/database.types";
 import { isSupabaseConfigured } from "./lib/supabase";
 import { ProfileAvatar } from "./components/ProfileAvatar";
+import okiariLogo from "./okiari-logo-clean.jpg";
 
 function LoadingScreen() {
   return (
@@ -83,8 +84,8 @@ function AppShell({ children }: { children: React.ReactNode }) {
     <div className="app-shell">
       <aside className="sidebar" aria-label="メインナビゲーション">
         <div className="brand-lockup compact">
-          <span className="brand-mark">
-            <HeartHandshake aria-hidden="true" />
+          <span className="brand-mark brand-logo-box">
+            <img alt="OkiFra" src={okiariLogo} />
           </span>
           <div>
             <strong>オキアリ</strong>

@@ -99,7 +99,9 @@ export function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [realtimeStatus, setRealtimeStatus] =
     useState<RealtimeStatus>("connecting");
-  const [bursts, setBursts] = useState<Array<{ id: number; left: number }>>([]);
+  const [bursts, setBursts] = useState<
+    Array<{ id: number; left: number; fontFamily: string }>
+  >([]);
   const burstId = useRef(0);
 
   const loadInteractions = useCallback(
@@ -390,9 +392,17 @@ export function DashboardPage() {
       });
     }
 
+    const burstFonts = [
+      "Inter, 'Noto Sans JP', sans-serif",
+      "'Yu Mincho', 'Hiragino Mincho ProN', serif",
+      "'Hiragino Maru Gothic ProN', 'Yu Gothic', sans-serif",
+      "'Yu Gothic', 'Noto Sans JP', sans-serif",
+      "Georgia, 'Yu Mincho', serif",
+    ];
     const nextBursts = Array.from({ length: reducedMotion() ? 1 : 5 }, () => ({
       id: burstId.current++,
       left: 22 + Math.random() * 56,
+      fontFamily: burstFonts[Math.floor(Math.random() * burstFonts.length)],
     }));
 
     setBursts((current) => [...current, ...nextBursts]);
@@ -541,7 +551,10 @@ export function DashboardPage() {
         </div>
         <div className="burst-layer" aria-hidden="true">
           {bursts.map((burst) => (
-            <span key={burst.id} style={{ left: `${burst.left}%` }}>
+            <span
+              key={burst.id}
+              style={{ left: `${burst.left}%`, fontFamily: burst.fontFamily }}
+            >
               ありがとう
             </span>
           ))}

@@ -36,13 +36,6 @@ function cleanStatus(value: unknown): Status | null {
   return null;
 }
 
-function cleanAvatarUrl(value: unknown) {
-  const text = cleanText(value);
-  if (!text) return null;
-  if (text.startsWith("data:image/") || text.startsWith("https://")) return text;
-  return null;
-}
-
 function cleanInteger(value: unknown): number | null {
   const parsed =
     typeof value === "number"
@@ -186,9 +179,6 @@ Deno.serve(async (req) => {
   if (action === "create-user") {
     const email = cleanEmail(body.email);
     const password = cleanText(body.password);
-    const displayName = cleanText(body.displayName);
-    const companyName = cleanText(body.companyName) || null;
-    const avatarUrl = cleanAvatarUrl(body.avatarUrl);
     const role = cleanRole(body.role);
 
     if (!email || !email.includes("@")) {
@@ -199,23 +189,12 @@ Deno.serve(async (req) => {
       return json({ error: "Password must be at least 6 characters." }, 400);
     }
 
-    if (!displayName) {
-      return json({ error: "Display name is required." }, 400);
-    }
-
-    if (avatarUrl && avatarUrl.length > 600_000) {
-      return json({ error: "Avatar image is too large." }, 400);
-    }
-
     const { data, error } = await admin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
       app_metadata: { role },
-      user_metadata: {
-        display_name: displayName,
-        company_name: companyName,
-      },
+      user_metadata: {},
     });
 
     if (error || !data.user) {
@@ -238,9 +217,9 @@ Deno.serve(async (req) => {
       {
         id: data.user.id,
         email,
-        display_name: displayName,
-        company_name: companyName,
-        avatar_url: avatarUrl,
+        display_name: null,
+        company_name: null,
+        avatar_url: null,
         avatar_scale: 100,
         status: "active",
       },

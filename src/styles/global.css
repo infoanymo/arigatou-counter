@@ -148,6 +148,20 @@ p {
   height: 25px;
 }
 
+.brand-logo-box {
+  width: 92px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 45, 85, 0.08);
+  background: white;
+}
+
+.brand-logo-box img {
+  display: block;
+  width: 88%;
+  height: 88%;
+  object-fit: contain;
+}
+
 .eyebrow {
   color: var(--teal-dark);
   font-size: 0.78rem;

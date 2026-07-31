@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   UserRound,
 } from "lucide-react";
+import { DatePickerField } from "../components/DatePickerField";
 import { ProfileAvatar } from "../components/ProfileAvatar";
 import { isValidAvatarFile, maxAvatarBytes, readAvatarFile } from "../lib/avatar";
 import { useAuth } from "../lib/auth";
@@ -333,34 +334,26 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
               />
             </label>
             <div className="form-grid">
-              <label>
-                <span>開始日</span>
-                <input
-                  onChange={(event) =>
-                    setPeriodForm((current) => ({
-                      ...current,
-                      starts_on: event.target.value,
-                    }))
-                  }
-                  required
-                  type="date"
-                  value={periodForm.starts_on}
-                />
-              </label>
-              <label>
-                <span>終了日</span>
-                <input
-                  onChange={(event) =>
-                    setPeriodForm((current) => ({
-                      ...current,
-                      ends_on: event.target.value,
-                    }))
-                  }
-                  required
-                  type="date"
-                  value={periodForm.ends_on}
-                />
-              </label>
+              <DatePickerField
+                label="開始日"
+                onChange={(value) =>
+                  setPeriodForm((current) => ({
+                    ...current,
+                    starts_on: value,
+                  }))
+                }
+                value={periodForm.starts_on}
+              />
+              <DatePickerField
+                label="終了日"
+                onChange={(value) =>
+                  setPeriodForm((current) => ({
+                    ...current,
+                    ends_on: value,
+                  }))
+                }
+                value={periodForm.ends_on}
+              />
             </div>
             <label>
               <span>目標数</span>

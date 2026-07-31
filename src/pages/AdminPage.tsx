@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
-  Building2,
   Calculator,
-  ImagePlus,
   KeyRound,
   RefreshCcw,
   Trash2,
@@ -21,7 +19,6 @@ import { formatDateTime, formatNumber } from "../lib/format";
 import { getSupabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { ProfileAvatar } from "../components/ProfileAvatar";
-import { isValidAvatarFile, maxAvatarBytes, readAvatarFile } from "../lib/avatar";
 
 type AdminUser = {
   id: string;
@@ -112,9 +109,6 @@ export function AdminPage({ section }: { section: AdminSection }) {
   const [eventCount, setEventCount] = useState(0);
   const [accountEmail, setAccountEmail] = useState("");
   const [accountPassword, setAccountPassword] = useState("");
-  const [accountCompany, setAccountCompany] = useState("");
-  const [accountName, setAccountName] = useState("");
-  const [accountAvatarUrl, setAccountAvatarUrl] = useState<string | null>(null);
   const [accountRole, setAccountRole] = useState<"member" | "admin">("member");
   const [adjustmentDelta, setAdjustmentDelta] = useState("");
   const [adjustmentReason, setAdjustmentReason] = useState("");
@@ -232,16 +226,10 @@ export function AdminPage({ section }: { section: AdminSection }) {
         action: "create-user",
         email: accountEmail.trim(),
         password: accountPassword,
-        displayName: accountName.trim(),
-        companyName: accountCompany.trim(),
-        avatarUrl: accountAvatarUrl,
         role: accountRole,
       });
       setAccountEmail("");
       setAccountPassword("");
-      setAccountCompany("");
-      setAccountName("");
-      setAccountAvatarUrl(null);
       setAccountRole("member");
       setMessage("アカウントを発行しました。");
       await loadAdmin();
@@ -251,22 +239,6 @@ export function AdminPage({ section }: { section: AdminSection }) {
       );
     } finally {
       setCreatingAccount(false);
-    }
-  }
-
-  async function handleIconChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!isValidAvatarFile(file)) {
-      setMessage(`アイコンは画像ファイル、${Math.floor(maxAvatarBytes / 1000)}KB以下にしてください。`);
-      return;
-    }
-
-    try {
-      setAccountAvatarUrl(await readAvatarFile(file));
-    } catch {
-      setMessage("アイコン画像を読み込めませんでした。");
     }
   }
 
@@ -425,46 +397,6 @@ export function AdminPage({ section }: { section: AdminSection }) {
                   </div>
                 </label>
                 <label>
-                  <span>会社名</span>
-                  <div className="input-shell">
-                    <Building2 aria-hidden="true" />
-                    <input
-                      onChange={(event) => setAccountCompany(event.target.value)}
-                      placeholder="株式会社オキファーム"
-                      value={accountCompany}
-                    />
-                  </div>
-                </label>
-                <label>
-                  <span>表示名</span>
-                  <input
-                    onChange={(event) => setAccountName(event.target.value)}
-                    placeholder="山田 太郎"
-                    required
-                    value={accountName}
-                  />
-                </label>
-                <div className="avatar-picker">
-                  <ProfileAvatar
-                    name={accountName || accountEmail || "ユーザー"}
-                    src={accountAvatarUrl}
-                    size="lg"
-                  />
-                  <label className="avatar-upload">
-                    <span>アイコン</span>
-                    <input accept="image/*" onChange={handleIconChange} type="file" />
-                  </label>
-                  {accountAvatarUrl ? (
-                    <button
-                      className="button button-secondary"
-                      onClick={() => setAccountAvatarUrl(null)}
-                      type="button"
-                    >
-                      削除
-                    </button>
-                  ) : null}
-                </div>
-                <label>
                   <span>権限</span>
                   <select
                     onChange={(event) =>
@@ -477,7 +409,7 @@ export function AdminPage({ section }: { section: AdminSection }) {
                   </select>
                 </label>
                 <button className="button button-primary" disabled={creatingAccount}>
-                  <ImagePlus aria-hidden="true" />
+                  <UserRound aria-hidden="true" />
                   {creatingAccount ? "発行中..." : "アカウントを発行"}
                 </button>
               </form>
