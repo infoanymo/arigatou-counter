@@ -1,0 +1,65 @@
+:root {
+  --bg: #f4f7fa;
+  --surface-strong: #f8fbfd;
+  --ink: #101c2b;
+  --muted: #657486;
+  --line: #d4dee8;
+  --teal: #002d55;
+  --teal-dark: #001f3d;
+  --coral: #dc5f4f;
+  --yellow: #f3c84b;
+  --blue: #2f80aa;
+  --green: #2f855a;
+  --shadow: 0 16px 48px rgba(0, 45, 85, 0.12);
+}
+
+body {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(244, 247, 250, 0.95)),
+    var(--bg);
+}
+
+.login-page {
+  background:
+    linear-gradient(135deg, rgba(0, 45, 85, 0.13), transparent 42%),
+    linear-gradient(180deg, #ffffff, #f4f7fa);
+}
+
+.hero-metrics {
+  border-left-color: var(--blue);
+}
+
+input:focus,
+select:focus,
+.input-shell:focus-within {
+  box-shadow: 0 0 0 3px rgba(0, 45, 85, 0.18);
+}
+
+.button-primary {
+  box-shadow: 0 10px 24px rgba(0, 45, 85, 0.24);
+}
+
+.form-message,
+.notice {
+  border-color: rgba(0, 45, 85, 0.22);
+  background: rgba(0, 45, 85, 0.08);
+}
+
+.nav-list a.active,
+.nav-list a:hover {
+  background: rgba(0, 45, 85, 0.1);
+}
+
+.hero-band {
+  background:
+    linear-gradient(135deg, rgba(0, 45, 85, 0.96), rgba(47, 128, 170, 0.9)),
+    var(--teal);
+}
+
+.thank-you-button {
+  box-shadow: 0 14px 28px rgba(0, 45, 85, 0.16);
+}
+
+.thank-you-button:not(:disabled):hover {
+  box-shadow: 0 18px 34px rgba(0, 45, 85, 0.2);
+}
