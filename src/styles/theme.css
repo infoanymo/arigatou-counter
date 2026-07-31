@@ -170,6 +170,53 @@ select:focus,
   background: rgba(0, 45, 85, 0.1);
 }
 
+.sidebar {
+  border-right-color: rgba(255, 255, 255, 0.18);
+  background: #002d55;
+  color: white;
+}
+
+.sidebar .brand-mark {
+  color: #002d55;
+  background: white;
+}
+
+.sidebar .brand-lockup.compact strong,
+.sidebar .nav-list a {
+  color: white;
+}
+
+.sidebar .brand-lockup.compact span:not(.brand-mark),
+.sidebar .account-card span {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.sidebar .nav-list a.active,
+.sidebar .nav-list a:hover {
+  color: #002d55;
+  background: white;
+}
+
+.sidebar .account-card {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.sidebar .account-card > svg,
+.sidebar .account-card strong {
+  color: white;
+}
+
+.sidebar .icon-button {
+  color: white;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.sidebar .icon-button:hover {
+  color: #002d55;
+  background: white;
+}
+
 .hero-band {
   background:
     linear-gradient(135deg, rgba(0, 45, 85, 0.96), rgba(47, 128, 170, 0.9)),
