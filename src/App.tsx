@@ -109,6 +109,10 @@ function AppShell({ children }: { children: React.ReactNode }) {
                 <CalendarDays aria-hidden="true" />
                 期間
               </NavLink>
+              <NavLink to="/analytics/person">
+                <UserRound aria-hidden="true" />
+                人物
+              </NavLink>
             </div>
           </details>
           <details
@@ -229,7 +233,15 @@ export default function App() {
         path="/analytics/period"
         element={
           <RequireAuth>
-            <AnalyticsPage />
+            <AnalyticsPage section="period" />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/analytics/person"
+        element={
+          <RequireAuth>
+            <AnalyticsPage section="person" />
           </RequireAuth>
         }
       />

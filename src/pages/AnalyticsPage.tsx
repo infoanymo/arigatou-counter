@@ -1,8 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { BarChart3, CalendarDays, RefreshCcw } from "lucide-react";
-import type { ThankYouAdjustment, ThankYouEvent } from "../lib/database.types";
-import { formatNumber } from "../lib/format";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { NavLink } from "react-router-dom";
+import { BarChart3, CalendarDays, RefreshCcw, UserRound } from "lucide-react";
+import type {
+  Profile,
+  ThankYouAdjustment,
+  ThankYouEvent,
+} from "../lib/database.types";
+import { formatDateTime, formatNumber } from "../lib/format";
 import { getSupabase } from "../lib/supabase";
+import { ProfileAvatar } from "../components/ProfileAvatar";
 
 type MonthlySummary = {
   key: string;
@@ -10,6 +16,27 @@ type MonthlySummary = {
   eventCount: number;
   adjustmentTotal: number;
   total: number;
+};
+
+type AnalyticsSection = "period" | "person";
+
+type EventWithProfile = ThankYouEvent & {
+  profiles: Pick<
+    Profile,
+    "display_name" | "email" | "company_name" | "avatar_url" | "avatar_scale"
+  > | null;
+};
+
+type PersonSummary = {
+  userId: string;
+  name: string;
+  email?: string;
+  companyName?: string;
+  avatarUrl?: string | null;
+  avatarScale?: number;
+  total: number;
+  rangeCount: number;
+  latestAt: string;
 };
 
 const today = new Date().toISOString().slice(0, 10);
@@ -43,8 +70,50 @@ function monthLabel(key: string) {
   return `${year}年${Number(month)}月`;
 }
 
-export function AnalyticsPage() {
-  const [events, setEvents] = useState<ThankYouEvent[]>([]);
+function nameForEvent(event: EventWithProfile) {
+  return event.profiles?.display_name || event.profiles?.email || "メンバー";
+}
+
+function openDatePicker(input: HTMLInputElement | null) {
+  if (!input) return;
+  input.focus();
+  const picker = input as HTMLInputElement & { showPicker?: () => void };
+  try {
+    picker.showPicker?.();
+  } catch {
+    // Some browsers only allow showPicker from direct user interaction.
+  }
+}
+
+function DateField({
+  label,
+  onChange,
+  value,
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <label>
+      <span>{label}</span>
+      <div className="date-field" onClick={() => openDatePicker(inputRef.current)}>
+        <CalendarDays aria-hidden="true" />
+        <input
+          ref={inputRef}
+          onChange={(event) => onChange(event.target.value)}
+          type="date"
+          value={value}
+        />
+      </div>
+    </label>
+  );
+}
+
+export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
+  const [events, setEvents] = useState<EventWithProfile[]>([]);
   const [adjustments, setAdjustments] = useState<ThankYouAdjustment[]>([]);
   const [startDate, setStartDate] = useState(monthStart(today));
   const [endDate, setEndDate] = useState(today);
@@ -59,10 +128,12 @@ export function AnalyticsPage() {
     const [eventsResult, adjustmentsResult] = await Promise.all([
       client
         .from("thank_you_events")
-        .select("id,period_id,user_id,created_at")
+        .select(
+          "id,period_id,user_id,created_at,profiles:profiles!thank_you_events_user_id_fkey(display_name,email,company_name,avatar_url,avatar_scale)",
+        )
         .order("created_at", { ascending: false })
         .limit(20000)
-        .returns<ThankYouEvent[]>(),
+        .returns<EventWithProfile[]>(),
       client
         .from("thank_you_adjustments")
         .select("id,period_id,admin_user_id,delta,reason,created_at")
@@ -152,14 +223,60 @@ export function AnalyticsPage() {
   }, [adjustments, endDate, events, startDate]);
 
   const allTimeTotal = monthlySummaries.reduce((sum, item) => sum + item.total, 0);
+  const personSummaries = useMemo(() => {
+    const start = new Date(toRangeStart(startDate)).getTime();
+    const end = new Date(toRangeEnd(endDate)).getTime();
+    const summaries = new Map<string, PersonSummary>();
+
+    for (const event of events) {
+      const createdAt = new Date(event.created_at).getTime();
+      const current = summaries.get(event.user_id);
+      const base: PersonSummary =
+        current ??
+        {
+          userId: event.user_id,
+          name: nameForEvent(event),
+          email: event.profiles?.email ?? undefined,
+          companyName: event.profiles?.company_name ?? undefined,
+          avatarUrl: event.profiles?.avatar_url,
+          avatarScale: event.profiles?.avatar_scale,
+          total: 0,
+          rangeCount: 0,
+          latestAt: event.created_at,
+        };
+
+      base.total += 1;
+      if (!rangeSummary.invalid && createdAt >= start && createdAt <= end) {
+        base.rangeCount += 1;
+      }
+      if (event.created_at > base.latestAt) base.latestAt = event.created_at;
+      summaries.set(event.user_id, base);
+    }
+
+    return [...summaries.values()].sort(
+      (a, b) =>
+        b.rangeCount - a.rangeCount ||
+        b.total - a.total ||
+        b.latestAt.localeCompare(a.latestAt),
+    );
+  }, [endDate, events, rangeSummary.invalid, startDate]);
+
+  const rangePersonCount = personSummaries.filter((person) => person.rangeCount > 0).length;
+  const topPerson = personSummaries.find((person) => person.rangeCount > 0);
+  const maxRangeCount = Math.max(1, ...personSummaries.map((person) => person.rangeCount));
+  const isPeriodSection = section === "period";
 
   return (
     <div className="analytics-page">
       <header className="page-header">
         <div>
           <p className="eyebrow">Analytics</p>
-          <h1>期間分析</h1>
-          <p>月ごとの推移と、指定期間のありがとう件数を確認します。</p>
+          <h1>{isPeriodSection ? "期間分析" : "人物分析"}</h1>
+          <p>
+            {isPeriodSection
+              ? "月ごとの推移と、指定期間のありがとう件数を確認します。"
+              : "メンバーごとのありがとう件数と、指定期間内の動きを確認します。"}
+          </p>
         </div>
         <button
           className="button button-secondary"
@@ -173,18 +290,49 @@ export function AnalyticsPage() {
 
       {message ? <p className="notice error">{message}</p> : null}
 
+      <nav className="admin-tabs" aria-label="分析メニュー">
+        <NavLink to="/analytics/period">
+          <CalendarDays aria-hidden="true" />
+          期間
+        </NavLink>
+        <NavLink to="/analytics/person">
+          <UserRound aria-hidden="true" />
+          人物
+        </NavLink>
+      </nav>
+
       <section className="analytics-summary-grid" aria-label="分析サマリー">
         <article className="stat-tile">
-          <BarChart3 aria-hidden="true" />
-          <span>全期間合計</span>
-          <strong>{loading ? "-" : formatNumber(Math.max(0, allTimeTotal))}</strong>
+          {isPeriodSection ? (
+            <>
+              <BarChart3 aria-hidden="true" />
+              <span>全期間合計</span>
+              <strong>{loading ? "-" : formatNumber(Math.max(0, allTimeTotal))}</strong>
+            </>
+          ) : (
+            <>
+              <UserRound aria-hidden="true" />
+              <span>分析対象人数</span>
+              <strong>{loading ? "-" : formatNumber(personSummaries.length)}</strong>
+            </>
+          )}
         </article>
         <article className="stat-tile">
-          <CalendarDays aria-hidden="true" />
-          <span>指定期間合計</span>
-          <strong>
-            {loading || rangeSummary.invalid ? "-" : formatNumber(rangeSummary.total)}
-          </strong>
+          {isPeriodSection ? (
+            <>
+              <CalendarDays aria-hidden="true" />
+              <span>指定期間合計</span>
+              <strong>
+                {loading || rangeSummary.invalid ? "-" : formatNumber(rangeSummary.total)}
+              </strong>
+            </>
+          ) : (
+            <>
+              <BarChart3 aria-hidden="true" />
+              <span>期間内トップ</span>
+              <strong>{loading || !topPerson ? "-" : formatNumber(topPerson.rangeCount)}</strong>
+            </>
+          )}
         </article>
       </section>
 
@@ -197,27 +345,16 @@ export function AnalyticsPage() {
           </div>
         </div>
         <div className="analytics-filter-grid">
-          <label>
-            <span>開始日</span>
-            <input
-              onChange={(event) => setStartDate(event.target.value)}
-              type="date"
-              value={startDate}
-            />
-          </label>
-          <label>
-            <span>終了日</span>
-            <input
-              onChange={(event) => setEndDate(event.target.value)}
-              type="date"
-              value={endDate}
-            />
-          </label>
+          <DateField label="開始日" onChange={setStartDate} value={startDate} />
+          <DateField label="終了日" onChange={setEndDate} value={endDate} />
         </div>
         {rangeSummary.invalid ? (
           <p className="notice error">終了日は開始日以降にしてください。</p>
         ) : (
-          <div className="adjustment-summary" aria-label="指定期間の内訳">
+          <div
+            className={`adjustment-summary ${!isPeriodSection ? "four-columns" : ""}`}
+            aria-label="指定期間の内訳"
+          >
             <div>
               <span>押下数</span>
               <strong>{formatNumber(rangeSummary.eventCount)}</strong>
@@ -233,50 +370,103 @@ export function AnalyticsPage() {
               <span>表示総数</span>
               <strong>{formatNumber(rangeSummary.total)}</strong>
             </div>
+            {!isPeriodSection ? (
+              <div>
+                <span>対象人数</span>
+                <strong>{formatNumber(rangePersonCount)}</strong>
+              </div>
+            ) : null}
           </div>
         )}
       </section>
 
-      <section className="panel">
-        <div className="panel-title">
-          <BarChart3 aria-hidden="true" />
-          <div>
-            <p className="eyebrow">Monthly</p>
-            <h2>月ごとの合計</h2>
+      {isPeriodSection ? (
+        <section className="panel">
+          <div className="panel-title">
+            <BarChart3 aria-hidden="true" />
+            <div>
+              <p className="eyebrow">Monthly</p>
+              <h2>月ごとの合計</h2>
+            </div>
           </div>
-        </div>
-        {loading ? (
-          <p className="muted">読み込み中...</p>
-        ) : monthlySummaries.length ? (
-          <div className="monthly-list">
-            {monthlySummaries.map((item) => {
-              const maxTotal = Math.max(
-                1,
-                ...monthlySummaries.map((summary) => Math.max(0, summary.total)),
-              );
-              const width = `${Math.max(4, (Math.max(0, item.total) / maxTotal) * 100)}%`;
-              return (
-                <article className="monthly-row" key={item.key}>
-                  <div>
-                    <strong>{item.label}</strong>
-                    <span>
-                      押下 {formatNumber(item.eventCount)} 件 / 補正{" "}
-                      {item.adjustmentTotal > 0 ? "+" : ""}
-                      {formatNumber(item.adjustmentTotal)} 件
-                    </span>
-                  </div>
-                  <em>{formatNumber(Math.max(0, item.total))}件</em>
-                  <div className="monthly-bar" aria-hidden="true">
-                    <span style={{ width }} />
-                  </div>
-                </article>
-              );
-            })}
+          {loading ? (
+            <p className="muted">読み込み中...</p>
+          ) : monthlySummaries.length ? (
+            <div className="monthly-list">
+              {monthlySummaries.map((item) => {
+                const maxTotal = Math.max(
+                  1,
+                  ...monthlySummaries.map((summary) => Math.max(0, summary.total)),
+                );
+                const width = `${Math.max(4, (Math.max(0, item.total) / maxTotal) * 100)}%`;
+                return (
+                  <article className="monthly-row" key={item.key}>
+                    <div>
+                      <strong>{item.label}</strong>
+                      <span>
+                        押下 {formatNumber(item.eventCount)} 件 / 補正{" "}
+                        {item.adjustmentTotal > 0 ? "+" : ""}
+                        {formatNumber(item.adjustmentTotal)} 件
+                      </span>
+                    </div>
+                    <em>{formatNumber(Math.max(0, item.total))}件</em>
+                    <div className="monthly-bar" aria-hidden="true">
+                      <span style={{ width }} />
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="muted">まだ集計できるありがとうがありません。</p>
+          )}
+        </section>
+      ) : (
+        <section className="panel">
+          <div className="panel-title">
+            <UserRound aria-hidden="true" />
+            <div>
+              <p className="eyebrow">People</p>
+              <h2>人物ごとの件数</h2>
+            </div>
           </div>
-        ) : (
-          <p className="muted">まだ集計できるありがとうがありません。</p>
-        )}
-      </section>
+          {loading ? (
+            <p className="muted">読み込み中...</p>
+          ) : personSummaries.length ? (
+            <div className="people-list">
+              {personSummaries.map((person) => {
+                const width = `${Math.max(4, (person.rangeCount / maxRangeCount) * 100)}%`;
+                return (
+                  <article className="person-row" key={person.userId}>
+                    <ProfileAvatar
+                      name={person.name}
+                      src={person.avatarUrl}
+                      avatarScale={person.avatarScale}
+                    />
+                    <div className="person-main">
+                      <strong>{person.name}</strong>
+                      <span>
+                        {person.companyName ? `${person.companyName} / ` : ""}
+                        直近 {formatDateTime(person.latestAt)}
+                      </span>
+                      <div className="monthly-bar" aria-hidden="true">
+                        <span style={{ width }} />
+                      </div>
+                    </div>
+                    <div className="person-counts">
+                      <span>期間内</span>
+                      <strong>{formatNumber(person.rangeCount)}</strong>
+                      <span>累計 {formatNumber(person.total)}</span>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="muted">まだ集計できるメンバーがいません。</p>
+          )}
+        </section>
+      )}
     </div>
   );
 }
