@@ -28,6 +28,7 @@ type AdminUser = {
   displayName: string | null;
   companyName: string | null;
   avatarUrl: string | null;
+  avatarScale: number;
   role: "admin" | "member";
   status: ProfileStatus;
   createdAt: string;
@@ -43,7 +44,7 @@ type PeriodForm = {
 };
 
 type AdjustmentWithProfile = ThankYouAdjustment & {
-  profiles: Pick<Profile, "display_name" | "email" | "avatar_url"> | null;
+  profiles: Pick<Profile, "display_name" | "email" | "avatar_url" | "avatar_scale"> | null;
 };
 
 const today = new Date().toISOString().slice(0, 10);
@@ -154,7 +155,7 @@ export function AdminPage() {
     const { data, error: adjustmentsError } = await client
       .from("thank_you_adjustments")
       .select(
-        "id, period_id, admin_user_id, delta, reason, created_at, profiles:profiles!thank_you_adjustments_admin_user_id_fkey(display_name,email,avatar_url)",
+        "id, period_id, admin_user_id, delta, reason, created_at, profiles:profiles!thank_you_adjustments_admin_user_id_fkey(display_name,email,avatar_url,avatar_scale)",
       )
       .eq("period_id", periodId)
       .order("created_at", { ascending: false })
@@ -625,6 +626,7 @@ export function AdminPage() {
                         "管理者"
                       }
                       src={item.profiles?.avatar_url}
+                      avatarScale={item.profiles?.avatar_scale}
                       size="sm"
                     />
                     <div>
@@ -677,6 +679,7 @@ export function AdminPage() {
                         <ProfileAvatar
                           name={item.displayName || item.email}
                           src={item.avatarUrl}
+                          avatarScale={item.avatarScale}
                         />
                         <div>
                           <strong>{item.displayName || item.email}</strong>

@@ -8,6 +8,7 @@ create table if not exists public.profiles (
   display_name text,
   company_name text,
   avatar_url text,
+  avatar_scale integer not null default 100 check (avatar_scale between 80 and 180),
   status text not null default 'active' check (status in ('active', 'disabled')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -15,7 +16,22 @@ create table if not exists public.profiles (
 
 alter table public.profiles
   add column if not exists company_name text,
-  add column if not exists avatar_url text;
+  add column if not exists avatar_url text,
+  add column if not exists avatar_scale integer not null default 100;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'profiles_avatar_scale_check'
+  ) then
+    alter table public.profiles
+      add constraint profiles_avatar_scale_check
+      check (avatar_scale between 80 and 180);
+  end if;
+end;
+$$;
 
 create table if not exists public.periods (
   id uuid primary key default gen_random_uuid(),

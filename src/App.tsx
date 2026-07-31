@@ -93,7 +93,12 @@ function AppShell({ children }: { children: React.ReactNode }) {
           ) : null}
         </nav>
         <div className="account-card">
-          <ProfileAvatar name={displayName} src={profile?.avatar_url} size="sm" />
+          <ProfileAvatar
+            name={displayName}
+            src={profile?.avatar_url}
+            avatarScale={profile?.avatar_scale}
+            size="sm"
+          />
           <div>
             <strong>{displayName}</strong>
             <span>

@@ -450,7 +450,13 @@ select:focus {
   background: #eef5fb;
   color: #002d55;
   font-weight: 900;
+}
+
+.avatar-image {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
+  transform: scale(var(--avatar-scale, 1));
 }
 
 .avatar-sm {
@@ -485,6 +491,23 @@ select:focus {
 
 .avatar-upload input {
   padding-top: 9px;
+}
+
+.range-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px;
+  align-items: center;
+  gap: 12px;
+}
+
+.range-field input {
+  min-height: 44px;
+  padding: 0;
+}
+
+.range-field strong {
+  color: var(--teal-dark);
+  text-align: right;
 }
 
 .icon-button {

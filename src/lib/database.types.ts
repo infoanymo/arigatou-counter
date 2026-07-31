@@ -18,6 +18,7 @@ export type Database = {
           display_name: string | null;
           company_name: string | null;
           avatar_url: string | null;
+          avatar_scale: number;
           status: ProfileStatus;
           created_at: string;
           updated_at: string;
@@ -28,6 +29,7 @@ export type Database = {
           display_name?: string | null;
           company_name?: string | null;
           avatar_url?: string | null;
+          avatar_scale?: number;
           status?: ProfileStatus;
           created_at?: string;
           updated_at?: string;
@@ -37,6 +39,7 @@ export type Database = {
           display_name?: string | null;
           company_name?: string | null;
           avatar_url?: string | null;
+          avatar_scale?: number;
           status?: ProfileStatus;
           updated_at?: string;
         };

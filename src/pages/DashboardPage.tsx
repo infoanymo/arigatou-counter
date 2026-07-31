@@ -21,7 +21,10 @@ import { useAuth } from "../lib/auth";
 import { ProfileAvatar } from "../components/ProfileAvatar";
 
 type EventWithProfile = ThankYouEvent & {
-  profiles: Pick<Profile, "display_name" | "email" | "company_name" | "avatar_url"> | null;
+  profiles: Pick<
+    Profile,
+    "display_name" | "email" | "company_name" | "avatar_url" | "avatar_scale"
+  > | null;
 };
 
 type RealtimeStatus = "connecting" | "connected" | "disconnected";
@@ -86,7 +89,7 @@ export function DashboardPage() {
     const { data, error: eventsError } = await client
       .from("thank_you_events")
       .select(
-        "id, period_id, user_id, created_at, profiles:profiles!thank_you_events_user_id_fkey(display_name,email,company_name,avatar_url)",
+        "id, period_id, user_id, created_at, profiles:profiles!thank_you_events_user_id_fkey(display_name,email,company_name,avatar_url,avatar_scale)",
       )
       .eq("period_id", periodId)
       .order("created_at", { ascending: false })
@@ -230,6 +233,7 @@ export function DashboardPage() {
         email?: string;
         companyName?: string;
         avatarUrl?: string;
+        avatarScale?: number;
         count: number;
         lastAt: string;
       }
@@ -247,6 +251,7 @@ export function DashboardPage() {
           email: event.profiles?.email ?? undefined,
           companyName: event.profiles?.company_name ?? undefined,
           avatarUrl: event.profiles?.avatar_url ?? undefined,
+          avatarScale: event.profiles?.avatar_scale ?? undefined,
           count: 1,
           lastAt: event.created_at,
         });
@@ -428,7 +433,12 @@ export function DashboardPage() {
               ranking.map((entry, index) => (
                 <li key={entry.userId}>
                   <span className="rank-number">{formatNumber(index + 1)}</span>
-                  <ProfileAvatar name={entry.name} src={entry.avatarUrl} size="sm" />
+                  <ProfileAvatar
+                    name={entry.name}
+                    src={entry.avatarUrl}
+                    avatarScale={entry.avatarScale}
+                    size="sm"
+                  />
                   <div>
                     <strong>{entry.name}</strong>
                     <span>
@@ -459,6 +469,7 @@ export function DashboardPage() {
                 <ProfileAvatar
                   name={nameForEvent(event)}
                   src={event.profiles?.avatar_url}
+                  avatarScale={event.profiles?.avatar_scale}
                   size="sm"
                 />
                 <div>

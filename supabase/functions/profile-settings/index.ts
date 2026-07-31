@@ -27,6 +27,18 @@ function cleanAvatarUrl(value: unknown) {
   return null;
 }
 
+function cleanAvatarScale(value: unknown) {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value.trim())
+        : NaN;
+
+  if (!Number.isInteger(parsed)) return 100;
+  return Math.min(180, Math.max(80, parsed));
+}
+
 function getAdminKey() {
   const legacyServiceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (legacyServiceRole) return legacyServiceRole;
@@ -90,6 +102,7 @@ Deno.serve(async (req) => {
   const displayName = cleanText(body.displayName);
   const companyName = cleanText(body.companyName) || null;
   const avatarUrl = cleanAvatarUrl(body.avatarUrl);
+  const avatarScale = cleanAvatarScale(body.avatarScale);
 
   if (!displayName) {
     return json({ error: "Display name is required." }, 400);
@@ -125,9 +138,10 @@ Deno.serve(async (req) => {
       display_name: displayName,
       company_name: companyName,
       avatar_url: avatarUrl,
+      avatar_scale: avatarScale,
     })
     .eq("id", user.id)
-    .select("id,email,display_name,company_name,avatar_url,status,created_at,updated_at")
+    .select("id,email,display_name,company_name,avatar_url,avatar_scale,status,created_at,updated_at")
     .single();
 
   if (error) return json({ error: error.message }, 400);

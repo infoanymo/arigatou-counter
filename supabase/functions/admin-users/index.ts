@@ -156,7 +156,7 @@ Deno.serve(async (req) => {
     const { data: profiles } = ids.length
       ? await admin
           .from("profiles")
-          .select("id,email,display_name,company_name,avatar_url,status")
+          .select("id,email,display_name,company_name,avatar_url,avatar_scale,status")
           .in("id", ids)
       : { data: [] };
 
@@ -173,6 +173,7 @@ Deno.serve(async (req) => {
           displayName: profile?.display_name ?? null,
           companyName: profile?.company_name ?? null,
           avatarUrl: profile?.avatar_url ?? null,
+          avatarScale: profile?.avatar_scale ?? 100,
           role: cleanRole(item.app_metadata?.role),
           status: (profile?.status ?? "active") as Status,
           createdAt: item.created_at,
@@ -240,6 +241,7 @@ Deno.serve(async (req) => {
         display_name: displayName,
         company_name: companyName,
         avatar_url: avatarUrl,
+        avatar_scale: 100,
         status: "active",
       },
       { onConflict: "id" },
@@ -293,6 +295,7 @@ Deno.serve(async (req) => {
         display_name: displayName,
         company_name: null,
         avatar_url: null,
+        avatar_scale: 100,
         status: "active",
       },
       { onConflict: "id" },

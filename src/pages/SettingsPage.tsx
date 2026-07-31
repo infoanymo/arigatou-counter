@@ -23,6 +23,7 @@ export function SettingsPage() {
   const [displayName, setDisplayName] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarScale, setAvatarScale] = useState(100);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -30,6 +31,7 @@ export function SettingsPage() {
     setDisplayName(profile?.display_name ?? "");
     setCompanyName(profile?.company_name ?? "");
     setAvatarUrl(profile?.avatar_url ?? null);
+    setAvatarScale(profile?.avatar_scale ?? 100);
   }, [profile]);
 
   async function handleIconChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -66,6 +68,7 @@ export function SettingsPage() {
         displayName: displayName.trim(),
         companyName: companyName.trim(),
         avatarUrl,
+        avatarScale,
       });
       await refreshAuth();
       setMessage("プロフィールを保存しました。");
@@ -106,6 +109,7 @@ export function SettingsPage() {
             <ProfileAvatar
               name={displayName || user?.email || "ユーザー"}
               src={avatarUrl}
+              avatarScale={avatarScale}
               size="lg"
             />
             <label className="avatar-upload">
@@ -122,6 +126,22 @@ export function SettingsPage() {
               </button>
             ) : null}
           </div>
+
+          <label>
+            <span>アイコンサイズ</span>
+            <div className="range-field">
+              <input
+                aria-label="アイコンサイズ"
+                max={180}
+                min={80}
+                onChange={(event) => setAvatarScale(Number(event.target.value))}
+                step={5}
+                type="range"
+                value={avatarScale}
+              />
+              <strong>{avatarScale}%</strong>
+            </div>
+          </label>
 
           <label>
             <span>表示名</span>
