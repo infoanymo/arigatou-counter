@@ -513,7 +513,8 @@ select:focus {
 }
 
 .dashboard-page,
-.admin-page {
+.admin-page,
+.settings-page {
   display: grid;
   gap: 22px;
   max-width: 1240px;
@@ -880,6 +881,14 @@ select:focus {
 
 .users-panel {
   overflow: hidden;
+}
+
+.settings-panel {
+  width: min(680px, 100%);
+}
+
+.profile-avatar-picker {
+  align-items: center;
 }
 
 .adjustment-summary {

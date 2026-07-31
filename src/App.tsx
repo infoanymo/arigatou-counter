@@ -1,8 +1,9 @@
 import { Navigate, NavLink, Route, Routes } from "react-router-dom";
-import { BarChart3, HeartHandshake, LogOut, Settings } from "lucide-react";
+import { BarChart3, HeartHandshake, LogOut, Settings, SlidersHorizontal } from "lucide-react";
 import { AdminPage } from "./pages/AdminPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { useAuth } from "./lib/auth";
 import { isSupabaseConfigured } from "./lib/supabase";
 import { ProfileAvatar } from "./components/ProfileAvatar";
@@ -80,6 +81,10 @@ function AppShell({ children }: { children: React.ReactNode }) {
             <BarChart3 aria-hidden="true" />
             ダッシュボード
           </NavLink>
+          <NavLink to="/settings">
+            <SlidersHorizontal aria-hidden="true" />
+            設定
+          </NavLink>
           {isAdmin ? (
             <NavLink to="/admin">
               <Settings aria-hidden="true" />
@@ -152,6 +157,14 @@ export default function App() {
         element={
           <RequireAuth adminOnly>
             <AdminPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <RequireAuth>
+            <SettingsPage />
           </RequireAuth>
         }
       />

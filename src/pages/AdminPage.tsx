@@ -20,6 +20,7 @@ import { formatDateTime, formatNumber } from "../lib/format";
 import { getSupabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { ProfileAvatar } from "../components/ProfileAvatar";
+import { isValidAvatarFile, maxAvatarBytes, readAvatarFile } from "../lib/avatar";
 
 type AdminUser = {
   id: string;
@@ -58,15 +59,6 @@ function formatIntegerInput(value: string, signed = false) {
 
   if (!digits) return sign;
   return `${sign}${formatNumber(Number(digits))}`;
-}
-
-function readIconFile(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.addEventListener("load", () => resolve(String(reader.result ?? "")));
-    reader.addEventListener("error", () => reject(reader.error));
-    reader.readAsDataURL(file);
-  });
 }
 
 function defaultPeriodForm(): PeriodForm {
@@ -297,18 +289,13 @@ export function AdminPage() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith("image/")) {
-      setMessage("アイコンは画像ファイルを選択してください。");
-      return;
-    }
-
-    if (file.size > 400_000) {
-      setMessage("アイコン画像は400KB以下にしてください。");
+    if (!isValidAvatarFile(file)) {
+      setMessage(`アイコンは画像ファイル、${Math.floor(maxAvatarBytes / 1000)}KB以下にしてください。`);
       return;
     }
 
     try {
-      setAccountAvatarUrl(await readIconFile(file));
+      setAccountAvatarUrl(await readAvatarFile(file));
     } catch {
       setMessage("アイコン画像を読み込めませんでした。");
     }
