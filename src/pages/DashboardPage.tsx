@@ -201,7 +201,7 @@ export function DashboardPage() {
   function runCelebration() {
     if (!reducedMotion()) {
       void confetti({
-        colors: ["#0f8b8d", "#f25f5c", "#ffe066", "#4f7cac"],
+        colors: ["#002d55", "#2f80aa", "#f3c84b", "#dc5f4f"],
         gravity: 0.85,
         origin: { x: 0.5, y: 0.82 },
         particleCount: 58,
