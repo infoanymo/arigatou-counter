@@ -36,10 +36,13 @@ create index if not exists thank_you_events_period_created_idx
   on public.thank_you_events (period_id, created_at desc);
 create index if not exists thank_you_events_period_user_idx
   on public.thank_you_events (period_id, user_id);
+create index if not exists thank_you_events_user_idx
+  on public.thank_you_events (user_id);
 
 create or replace function app_private.touch_updated_at()
 returns trigger
 language plpgsql
+set search_path = pg_catalog
 as $$
 begin
   new.updated_at = now();
@@ -151,7 +154,7 @@ on public.profiles
 for update
 to authenticated
 using (app_private.current_user_is_admin())
-with check (true);
+with check (app_private.current_user_is_admin());
 
 drop policy if exists "periods_select_for_active_users" on public.periods;
 create policy "periods_select_for_active_users"
