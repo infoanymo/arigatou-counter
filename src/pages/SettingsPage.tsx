@@ -137,7 +137,12 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
     event.preventDefault();
 
     if (!displayName.trim()) {
-      setMessage("表示名を入力してください。");
+      setMessage("登録名を入力してください。");
+      return;
+    }
+
+    if (!companyName.trim()) {
+      setMessage("会社名を入力してください。");
       return;
     }
 
@@ -202,6 +207,7 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
   }
 
   const isProfileSection = section === "profile";
+  const profileIncomplete = !profile?.display_name?.trim() || !profile.company_name?.trim();
 
   return (
     <div className="settings-page">
@@ -211,13 +217,18 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
           <h1>{isProfileSection ? "プロフィール設定" : "目標設定"}</h1>
           <p>
             {isProfileSection
-              ? (user?.email ?? "")
+              ? "登録名と会社名を設定してください。"
               : "今期の名前、期間、目標数を設定します。"}
           </p>
         </div>
       </header>
 
       {message ? <p className="notice">{message}</p> : null}
+      {!message && isProfileSection && profileIncomplete ? (
+        <p className="notice">
+          初回ログイン時は、登録名と会社名の設定が必要です。
+        </p>
+      ) : null}
 
       {isProfileSection ? (
         <section className="panel settings-panel">
@@ -269,7 +280,7 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
           </label>
 
           <label>
-            <span>表示名</span>
+            <span>登録名</span>
             <div className="input-shell">
               <UserRound aria-hidden="true" />
               <input
@@ -286,6 +297,7 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
               <Building2 aria-hidden="true" />
               <input
                 onChange={(event) => setCompanyName(event.target.value)}
+                required
                 value={companyName}
               />
             </div>

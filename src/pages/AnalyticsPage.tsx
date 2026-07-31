@@ -45,6 +45,48 @@ function monthStart(value: string) {
   return `${value.slice(0, 7)}-01`;
 }
 
+function parseDate(value: string) {
+  return new Date(`${value}T00:00:00+09:00`);
+}
+
+function formatDateValue(value: Date) {
+  const year = value.getFullYear();
+  const month = `${value.getMonth() + 1}`.padStart(2, "0");
+  const day = `${value.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatDateLabel(value: string) {
+  const date = parseDate(value);
+  return `${date.getFullYear()}/${`${date.getMonth() + 1}`.padStart(2, "0")}/${`${date.getDate()}`.padStart(2, "0")}`;
+}
+
+function addMonths(value: Date, amount: number) {
+  const next = new Date(value);
+  next.setMonth(next.getMonth() + amount);
+  return next;
+}
+
+function sameDate(a: Date, b: Date) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function calendarDaysFor(value: Date) {
+  const first = new Date(value.getFullYear(), value.getMonth(), 1);
+  const start = new Date(first);
+  start.setDate(first.getDate() - first.getDay());
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const day = new Date(start);
+    day.setDate(start.getDate() + index);
+    return day;
+  });
+}
+
 function toRangeStart(value: string) {
   return `${value}T00:00:00+09:00`;
 }
@@ -74,17 +116,6 @@ function nameForEvent(event: EventWithProfile) {
   return event.profiles?.display_name || event.profiles?.email || "メンバー";
 }
 
-function openDatePicker(input: HTMLInputElement | null) {
-  if (!input) return;
-  input.focus();
-  const picker = input as HTMLInputElement & { showPicker?: () => void };
-  try {
-    picker.showPicker?.();
-  } catch {
-    // Some browsers only allow showPicker from direct user interaction.
-  }
-}
-
 function DateField({
   label,
   onChange,
@@ -94,20 +125,109 @@ function DateField({
   onChange: (value: string) => void;
   value: string;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLLabelElement>(null);
+  const selectedDate = parseDate(value);
+  const [open, setOpen] = useState(false);
+  const [viewMonth, setViewMonth] = useState(() => parseDate(monthStart(value)));
+
+  useEffect(() => {
+    if (!open) setViewMonth(parseDate(monthStart(value)));
+  }, [open, value]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [open]);
 
   return (
-    <label>
+    <label className="date-picker-field" ref={rootRef}>
       <span>{label}</span>
-      <div className="date-field" onClick={() => openDatePicker(inputRef.current)}>
+      <button
+        className="date-field"
+        onClick={() => setOpen((current) => !current)}
+        type="button"
+      >
         <CalendarDays aria-hidden="true" />
-        <input
-          ref={inputRef}
-          onChange={(event) => onChange(event.target.value)}
-          type="date"
-          value={value}
-        />
-      </div>
+        <strong>{formatDateLabel(value)}</strong>
+      </button>
+      {open ? (
+        <div className="calendar-popover">
+          <div className="calendar-header">
+            <strong>
+              {viewMonth.getFullYear()}年{viewMonth.getMonth() + 1}月
+            </strong>
+            <div>
+              <button
+                className="icon-button"
+                onClick={() => setViewMonth((current) => addMonths(current, -1))}
+                type="button"
+                aria-label="前の月"
+              >
+                <span aria-hidden="true">‹</span>
+              </button>
+              <button
+                className="icon-button"
+                onClick={() => setViewMonth((current) => addMonths(current, 1))}
+                type="button"
+                aria-label="次の月"
+              >
+                <span aria-hidden="true">›</span>
+              </button>
+            </div>
+          </div>
+          <div className="calendar-weekdays" aria-hidden="true">
+            {["日", "月", "火", "水", "木", "金", "土"].map((day) => (
+              <span key={day}>{day}</span>
+            ))}
+          </div>
+          <div className="calendar-grid">
+            {calendarDaysFor(viewMonth).map((day) => {
+              const inMonth = day.getMonth() === viewMonth.getMonth();
+              const selected = sameDate(day, selectedDate);
+              const isToday = sameDate(day, parseDate(today));
+              return (
+                <button
+                  className={[
+                    "calendar-day",
+                    inMonth ? "" : "outside",
+                    selected ? "selected" : "",
+                    isToday ? "today" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  key={formatDateValue(day)}
+                  onClick={() => {
+                    onChange(formatDateValue(day));
+                    setOpen(false);
+                  }}
+                  type="button"
+                >
+                  {day.getDate()}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            className="button button-secondary calendar-today"
+            onClick={() => {
+              onChange(today);
+              setViewMonth(parseDate(monthStart(today)));
+              setOpen(false);
+            }}
+            type="button"
+          >
+            今日
+          </button>
+        </div>
+      ) : null}
     </label>
   );
 }
@@ -117,6 +237,8 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
   const [adjustments, setAdjustments] = useState<ThankYouAdjustment[]>([]);
   const [startDate, setStartDate] = useState(monthStart(today));
   const [endDate, setEndDate] = useState(today);
+  const [draftStartDate, setDraftStartDate] = useState(monthStart(today));
+  const [draftEndDate, setDraftEndDate] = useState(today);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -265,6 +387,23 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
   const topPerson = personSummaries.find((person) => person.rangeCount > 0);
   const maxRangeCount = Math.max(1, ...personSummaries.map((person) => person.rangeCount));
   const isPeriodSection = section === "period";
+  const draftInvalid =
+    !draftStartDate ||
+    !draftEndDate ||
+    new Date(toRangeStart(draftStartDate)).getTime() >
+      new Date(toRangeEnd(draftEndDate)).getTime();
+  const rangeDirty = draftStartDate !== startDate || draftEndDate !== endDate;
+
+  function applyDateRange() {
+    if (draftInvalid) {
+      setMessage("終了日は開始日以降にしてください。");
+      return;
+    }
+
+    setStartDate(draftStartDate);
+    setEndDate(draftEndDate);
+    setMessage(null);
+  }
 
   return (
     <div className="analytics-page">
@@ -345,10 +484,26 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
           </div>
         </div>
         <div className="analytics-filter-grid">
-          <DateField label="開始日" onChange={setStartDate} value={startDate} />
-          <DateField label="終了日" onChange={setEndDate} value={endDate} />
+          <DateField label="開始日" onChange={setDraftStartDate} value={draftStartDate} />
+          <DateField label="終了日" onChange={setDraftEndDate} value={draftEndDate} />
         </div>
-        {rangeSummary.invalid ? (
+        <div className="analytics-apply-row">
+          <p>
+            {rangeDirty
+              ? "日付を選択中です。適用すると下の数値が更新されます。"
+              : `${formatDateLabel(startDate)} から ${formatDateLabel(endDate)} で集計中です。`}
+          </p>
+          <button
+            className="button button-primary"
+            disabled={draftInvalid || !rangeDirty}
+            onClick={applyDateRange}
+            type="button"
+          >
+            <CalendarDays aria-hidden="true" />
+            適用
+          </button>
+        </div>
+        {draftInvalid ? (
           <p className="notice error">終了日は開始日以降にしてください。</p>
         ) : (
           <div

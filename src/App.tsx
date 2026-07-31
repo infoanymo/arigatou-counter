@@ -18,6 +18,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { useAuth } from "./lib/auth";
+import type { Profile } from "./lib/database.types";
 import { isSupabaseConfigured } from "./lib/supabase";
 import { ProfileAvatar } from "./components/ProfileAvatar";
 
@@ -198,11 +199,15 @@ function RequireAuth({
   adminOnly?: boolean;
 }) {
   const { user, profile, loading, isAdmin } = useAuth();
+  const location = useLocation();
 
   if (!isSupabaseConfigured) return <SetupRequired />;
   if (loading) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" replace />;
   if (profile?.status === "disabled") return <DisabledAccount />;
+  if (!isProfileComplete(profile) && location.pathname !== "/settings/profile") {
+    return <Navigate to="/settings/profile" replace />;
+  }
   if (adminOnly && !isAdmin) return <Navigate to="/" replace />;
 
   return <AppShell>{children}</AppShell>;
@@ -219,6 +224,10 @@ function FallbackRoute() {
   }
 
   return <Navigate to="/" replace />;
+}
+
+function isProfileComplete(profile: Profile | null) {
+  return Boolean(profile?.display_name?.trim() && profile.company_name?.trim());
 }
 
 export default function App() {
