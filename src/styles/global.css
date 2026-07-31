@@ -598,10 +598,12 @@ select:focus {
 }
 
 .hero-band {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 180px;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.8fr) 180px;
   align-items: center;
   gap: 24px;
+  overflow: hidden;
   border-radius: 8px;
   background:
     linear-gradient(135deg, rgba(15, 139, 141, 0.92), rgba(79, 124, 172, 0.92)),
@@ -639,6 +641,11 @@ select:focus {
   font-size: 1rem;
 }
 
+.hero-button-area {
+  display: grid;
+  justify-items: center;
+}
+
 .progress-ring {
   display: grid;
   width: 166px;
@@ -659,19 +666,26 @@ select:focus {
 .action-band {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 18px;
+  gap: 10px;
   overflow: hidden;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(0, 45, 85, 0.2);
+  border-left: 7px solid var(--teal);
   border-radius: 8px;
-  background: white;
-  padding: 20px;
+  background:
+    linear-gradient(90deg, rgba(0, 45, 85, 0.06), rgba(255, 255, 255, 0.96) 34%),
+    white;
+  box-shadow: 0 14px 34px rgba(0, 45, 85, 0.08);
+  padding: 24px 28px;
+}
+
+.action-band .eyebrow {
+  color: #002d55;
+  font-size: 0.86rem;
 }
 
 .action-band h2 {
   margin-top: 4px;
-  font-size: 1.45rem;
+  font-size: clamp(1.55rem, 2.5vw, 2.3rem);
   line-height: 1.55;
 }
 
@@ -682,17 +696,24 @@ select:focus {
 
 .thank-you-button {
   display: inline-flex;
-  min-height: 62px;
-  min-width: 240px;
+  position: relative;
+  min-height: 76px;
+  min-width: min(320px, 100%);
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 8px;
-  color: #17202c;
-  background: var(--yellow);
-  box-shadow: 0 14px 28px rgba(242, 95, 92, 0.2);
+  color: #002d55;
+  background:
+    linear-gradient(135deg, #ffffff 0%, #f5fbff 48%, #f3c84b 150%),
+    white;
+  box-shadow:
+    0 18px 40px rgba(0, 20, 38, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: 900;
   transition:
     transform 150ms ease,
@@ -700,15 +721,36 @@ select:focus {
     opacity 150ms ease;
 }
 
+.thank-you-button::before {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 0 32%, rgba(255, 255, 255, 0.82), transparent 68%);
+  content: "";
+  opacity: 0.72;
+  transform: translateX(-110%);
+  transition: transform 420ms ease;
+}
+
+.thank-you-button > * {
+  position: relative;
+  z-index: 1;
+}
+
 .thank-you-button svg {
-  width: 21px;
-  height: 21px;
-  color: var(--coral);
+  width: 23px;
+  height: 23px;
+  color: #d49c00;
 }
 
 .thank-you-button:not(:disabled):hover {
-  transform: translateY(-2px);
-  box-shadow: 0 18px 34px rgba(242, 95, 92, 0.24);
+  transform: translateY(-3px);
+  box-shadow:
+    0 24px 48px rgba(0, 20, 38, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.98);
+}
+
+.thank-you-button:not(:disabled):hover::before {
+  transform: translateX(110%);
 }
 
 .thank-you-button:not(:disabled):active {
@@ -729,8 +771,9 @@ select:focus {
 
 .burst-layer span {
   position: absolute;
-  bottom: 20px;
-  color: var(--coral);
+  bottom: 38px;
+  color: #ffffff;
+  text-shadow: 0 2px 10px rgba(0, 20, 38, 0.32);
   font-weight: 900;
   opacity: 0;
   transform: translateY(0);

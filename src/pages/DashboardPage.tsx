@@ -357,6 +357,17 @@ export function DashboardPage() {
           <strong>{formatNumber(totalDisplay)}</strong>
           <span>目標 {period ? formatNumber(period.target_count) : "-"} 件</span>
         </div>
+        <div className="hero-button-area">
+          <button
+            className="thank-you-button"
+            disabled={!period || submitting}
+            onClick={() => void handleThankYou()}
+            type="button"
+          >
+            <Sparkles aria-hidden="true" />
+            <span>{submitting ? "登録中..." : "ありがとうをもらったよ"}</span>
+          </button>
+        </div>
         <div
           className="progress-ring"
           style={{ "--progress": `${progressDegrees}deg` } as React.CSSProperties}
@@ -364,28 +375,6 @@ export function DashboardPage() {
         >
           <span>{formatNumber(roundedProgress)}%</span>
         </div>
-      </section>
-
-      <section className="action-band">
-        <div>
-          <p className="eyebrow">Object</p>
-          <h2>
-            一人でも多くの人の日常をアップデートすることで、「オーキ製薬に出会えてよかった」を溢れさせる
-          </h2>
-          <p>
-            {profile?.display_name || user?.email || "あなた"}さんの今期カウント:
-            <strong> {formatNumber(myCount)} </strong>件
-          </p>
-        </div>
-        <button
-          className="thank-you-button"
-          disabled={!period || submitting}
-          onClick={() => void handleThankYou()}
-          type="button"
-        >
-          <Sparkles aria-hidden="true" />
-          {submitting ? "登録中..." : "ありがとうをもらったよ"}
-        </button>
         <div className="burst-layer" aria-hidden="true">
           {bursts.map((burst) => (
             <span key={burst.id} style={{ left: `${burst.left}%` }}>
@@ -393,6 +382,17 @@ export function DashboardPage() {
             </span>
           ))}
         </div>
+      </section>
+
+      <section className="action-band">
+        <p className="eyebrow">Object</p>
+        <h2>
+          一人でも多くの人の日常をアップデートすることで、「オーキ製薬に出会えてよかった」を溢れさせる
+        </h2>
+        <p>
+          {profile?.display_name || user?.email || "あなた"}さんの今期カウント:
+          <strong> {formatNumber(myCount)} </strong>件
+        </p>
       </section>
 
       <section className="stat-grid" aria-label="進捗サマリー">
