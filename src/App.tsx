@@ -1,10 +1,11 @@
 import { Navigate, NavLink, Route, Routes } from "react-router-dom";
-import { BarChart3, HeartHandshake, LogOut, Settings, UserRound } from "lucide-react";
+import { BarChart3, HeartHandshake, LogOut, Settings } from "lucide-react";
 import { AdminPage } from "./pages/AdminPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { useAuth } from "./lib/auth";
 import { isSupabaseConfigured } from "./lib/supabase";
+import { ProfileAvatar } from "./components/ProfileAvatar";
 
 function LoadingScreen() {
   return (
@@ -60,6 +61,7 @@ function DisabledAccount() {
 function AppShell({ children }: { children: React.ReactNode }) {
   const { user, profile, isAdmin, signOut } = useAuth();
   const displayName = profile?.display_name || user?.email || "メンバー";
+  const roleLabel = isAdmin ? "管理者" : "メンバー";
 
   return (
     <div className="app-shell">
@@ -86,10 +88,13 @@ function AppShell({ children }: { children: React.ReactNode }) {
           ) : null}
         </nav>
         <div className="account-card">
-          <UserRound aria-hidden="true" />
+          <ProfileAvatar name={displayName} src={profile?.avatar_url} size="sm" />
           <div>
             <strong>{displayName}</strong>
-            <span>{isAdmin ? "管理者" : "メンバー"}</span>
+            <span>
+              {profile?.company_name ? `${profile.company_name} / ` : ""}
+              {roleLabel}
+            </span>
           </div>
           <button
             className="icon-button"

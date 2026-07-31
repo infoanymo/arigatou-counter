@@ -440,6 +440,53 @@ select:focus {
   font-size: 0.82rem;
 }
 
+.avatar {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(0, 45, 85, 0.2);
+  border-radius: 50%;
+  background: #eef5fb;
+  color: #002d55;
+  font-weight: 900;
+  object-fit: cover;
+}
+
+.avatar-sm {
+  width: 34px;
+  height: 34px;
+  font-size: 0.82rem;
+}
+
+.avatar-md {
+  width: 42px;
+  height: 42px;
+  font-size: 0.95rem;
+}
+
+.avatar-lg {
+  width: 62px;
+  height: 62px;
+  font-size: 1.35rem;
+}
+
+.avatar-fallback svg {
+  width: 18px;
+  height: 18px;
+}
+
+.avatar-picker {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.avatar-upload input {
+  padding-top: 9px;
+}
+
 .icon-button {
   display: grid;
   width: 34px;
@@ -717,7 +764,7 @@ select:focus {
 .ranking-list li {
   display: grid;
   min-height: 58px;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
+  grid-template-columns: 34px 34px minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   border: 1px solid var(--line);
@@ -769,11 +816,12 @@ select:focus {
 
 .timeline-row {
   display: grid;
-  grid-template-columns: 14px minmax(0, 1fr);
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
   gap: 12px;
 }
 
-.timeline-row > span {
+.timeline-row > span:not(.avatar) {
   width: 10px;
   height: 10px;
   margin-top: 6px;
@@ -878,6 +926,19 @@ select:focus {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px 12px;
+}
+
+.adjustment-user,
+.user-cell {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.adjustment-user > div,
+.user-cell > div {
+  min-width: 0;
 }
 
 .adjustment-row > strong {

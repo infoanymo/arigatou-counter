@@ -6,10 +6,16 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   email text not null unique,
   display_name text,
+  company_name text,
+  avatar_url text,
   status text not null default 'active' check (status in ('active', 'disabled')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.profiles
+  add column if not exists company_name text,
+  add column if not exists avatar_url text;
 
 create table if not exists public.periods (
   id uuid primary key default gen_random_uuid(),
@@ -70,7 +76,7 @@ security definer
 set search_path = public, auth
 as $$
 begin
-  insert into public.profiles (id, email, display_name)
+  insert into public.profiles (id, email, display_name, company_name, avatar_url)
   values (
     new.id,
     new.email,
@@ -78,11 +84,15 @@ begin
       new.raw_user_meta_data ->> 'display_name',
       new.raw_user_meta_data ->> 'name',
       split_part(new.email, '@', 1)
-    )
+    ),
+    new.raw_user_meta_data ->> 'company_name',
+    new.raw_user_meta_data ->> 'avatar_url'
   )
   on conflict (id) do update
     set email = excluded.email,
         display_name = coalesce(public.profiles.display_name, excluded.display_name),
+        company_name = coalesce(public.profiles.company_name, excluded.company_name),
+        avatar_url = coalesce(public.profiles.avatar_url, excluded.avatar_url),
         updated_at = now();
 
   return new;
@@ -138,11 +148,13 @@ create trigger on_auth_user_created
 after insert or update of email, raw_user_meta_data on auth.users
 for each row execute function app_private.handle_new_user();
 
-insert into public.profiles (id, email, display_name)
+insert into public.profiles (id, email, display_name, company_name, avatar_url)
 select
   id,
   email,
-  coalesce(raw_user_meta_data ->> 'display_name', raw_user_meta_data ->> 'name', split_part(email, '@', 1))
+  coalesce(raw_user_meta_data ->> 'display_name', raw_user_meta_data ->> 'name', split_part(email, '@', 1)),
+  raw_user_meta_data ->> 'company_name',
+  raw_user_meta_data ->> 'avatar_url'
 from auth.users
 on conflict (id) do nothing;
 

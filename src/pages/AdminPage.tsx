@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Building2,
   Calculator,
   CalendarDays,
-  MailPlus,
+  ImagePlus,
+  KeyRound,
   RefreshCcw,
   ShieldCheck,
+  UserRound,
   UserCog,
 } from "lucide-react";
 import type {
@@ -16,11 +19,14 @@ import type {
 import { formatDateTime, formatNumber } from "../lib/format";
 import { getSupabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
+import { ProfileAvatar } from "../components/ProfileAvatar";
 
 type AdminUser = {
   id: string;
   email: string;
   displayName: string | null;
+  companyName: string | null;
+  avatarUrl: string | null;
   role: "admin" | "member";
   status: ProfileStatus;
   createdAt: string;
@@ -36,7 +42,7 @@ type PeriodForm = {
 };
 
 type AdjustmentWithProfile = ThankYouAdjustment & {
-  profiles: Pick<Profile, "display_name" | "email"> | null;
+  profiles: Pick<Profile, "display_name" | "email" | "avatar_url"> | null;
 };
 
 const today = new Date().toISOString().slice(0, 10);
@@ -52,6 +58,15 @@ function formatIntegerInput(value: string, signed = false) {
 
   if (!digits) return sign;
   return `${sign}${formatNumber(Number(digits))}`;
+}
+
+function readIconFile(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result ?? "")));
+    reader.addEventListener("error", () => reject(reader.error));
+    reader.readAsDataURL(file);
+  });
 }
 
 function defaultPeriodForm(): PeriodForm {
@@ -99,14 +114,17 @@ export function AdminPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [adjustments, setAdjustments] = useState<AdjustmentWithProfile[]>([]);
   const [eventCount, setEventCount] = useState(0);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteName, setInviteName] = useState("");
-  const [inviteRole, setInviteRole] = useState<"member" | "admin">("member");
+  const [accountEmail, setAccountEmail] = useState("");
+  const [accountPassword, setAccountPassword] = useState("");
+  const [accountCompany, setAccountCompany] = useState("");
+  const [accountName, setAccountName] = useState("");
+  const [accountAvatarUrl, setAccountAvatarUrl] = useState<string | null>(null);
+  const [accountRole, setAccountRole] = useState<"member" | "admin">("member");
   const [adjustmentDelta, setAdjustmentDelta] = useState("");
   const [adjustmentReason, setAdjustmentReason] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingPeriod, setSavingPeriod] = useState(false);
-  const [inviting, setInviting] = useState(false);
+  const [creatingAccount, setCreatingAccount] = useState(false);
   const [savingAdjustment, setSavingAdjustment] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -144,7 +162,7 @@ export function AdminPage() {
     const { data, error: adjustmentsError } = await client
       .from("thank_you_adjustments")
       .select(
-        "id, period_id, admin_user_id, delta, reason, created_at, profiles:profiles!thank_you_adjustments_admin_user_id_fkey(display_name,email)",
+        "id, period_id, admin_user_id, delta, reason, created_at, profiles:profiles!thank_you_adjustments_admin_user_id_fkey(display_name,email,avatar_url)",
       )
       .eq("period_id", periodId)
       .order("created_at", { ascending: false })
@@ -243,29 +261,56 @@ export function AdminPage() {
     setSavingPeriod(false);
   }
 
-  async function handleInvite(event: React.FormEvent<HTMLFormElement>) {
+  async function handleCreateAccount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setInviting(true);
+    setCreatingAccount(true);
     setMessage(null);
 
     try {
       await invokeAdmin({
-        action: "invite",
-        email: inviteEmail.trim(),
-        displayName: inviteName.trim(),
-        role: inviteRole,
+        action: "create-user",
+        email: accountEmail.trim(),
+        password: accountPassword,
+        displayName: accountName.trim(),
+        companyName: accountCompany.trim(),
+        avatarUrl: accountAvatarUrl,
+        role: accountRole,
       });
-      setInviteEmail("");
-      setInviteName("");
-      setInviteRole("member");
-      setMessage("招待メールを送信しました。");
+      setAccountEmail("");
+      setAccountPassword("");
+      setAccountCompany("");
+      setAccountName("");
+      setAccountAvatarUrl(null);
+      setAccountRole("member");
+      setMessage("アカウントを発行しました。");
       await loadAdmin();
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : "招待メールを送信できませんでした。",
+        error instanceof Error ? error.message : "アカウントを発行できませんでした。",
       );
     } finally {
-      setInviting(false);
+      setCreatingAccount(false);
+    }
+  }
+
+  async function handleIconChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setMessage("アイコンは画像ファイルを選択してください。");
+      return;
+    }
+
+    if (file.size > 400_000) {
+      setMessage("アイコン画像は400KB以下にしてください。");
+      return;
+    }
+
+    try {
+      setAccountAvatarUrl(await readIconFile(file));
+    } catch {
+      setMessage("アイコン画像を読み込めませんでした。");
     }
   }
 
@@ -336,7 +381,7 @@ export function AdminPage() {
         <div>
           <p className="eyebrow">Admin</p>
           <h1>管理</h1>
-          <p>期の目標、招待、権限を管理します。</p>
+          <p>期の目標、アカウント発行、権限、件数補正を管理します。</p>
         </div>
         <button className="button button-secondary" onClick={() => void loadAdmin()}>
           <RefreshCcw aria-hidden="true" />
@@ -430,47 +475,93 @@ export function AdminPage() {
 
         <article className="panel">
           <div className="panel-title">
-            <MailPlus aria-hidden="true" />
+            <UserRound aria-hidden="true" />
             <div>
-              <p className="eyebrow">Invite</p>
-              <h2>ユーザー招待</h2>
+              <p className="eyebrow">Account</p>
+              <h2>アカウント発行</h2>
             </div>
           </div>
-          <form className="form-stack" onSubmit={handleInvite}>
+          <form className="form-stack" onSubmit={handleCreateAccount}>
             <label>
               <span>メールアドレス</span>
               <input
                 autoComplete="email"
                 inputMode="email"
-                onChange={(event) => setInviteEmail(event.target.value)}
+                onChange={(event) => setAccountEmail(event.target.value)}
                 required
                 type="email"
-                value={inviteEmail}
+                value={accountEmail}
               />
+            </label>
+            <label>
+              <span>パスワード</span>
+              <div className="input-shell">
+                <KeyRound aria-hidden="true" />
+                <input
+                  autoComplete="new-password"
+                  minLength={6}
+                  onChange={(event) => setAccountPassword(event.target.value)}
+                  required
+                  type="password"
+                  value={accountPassword}
+                />
+              </div>
+            </label>
+            <label>
+              <span>会社名</span>
+              <div className="input-shell">
+                <Building2 aria-hidden="true" />
+                <input
+                  onChange={(event) => setAccountCompany(event.target.value)}
+                  placeholder="株式会社オキファーム"
+                  value={accountCompany}
+                />
+              </div>
             </label>
             <label>
               <span>表示名</span>
               <input
-                onChange={(event) => setInviteName(event.target.value)}
+                onChange={(event) => setAccountName(event.target.value)}
                 placeholder="山田 太郎"
-                value={inviteName}
+                required
+                value={accountName}
               />
             </label>
+            <div className="avatar-picker">
+              <ProfileAvatar
+                name={accountName || accountEmail || "ユーザー"}
+                src={accountAvatarUrl}
+                size="lg"
+              />
+              <label className="avatar-upload">
+                <span>アイコン</span>
+                <input accept="image/*" onChange={handleIconChange} type="file" />
+              </label>
+              {accountAvatarUrl ? (
+                <button
+                  className="button button-secondary"
+                  onClick={() => setAccountAvatarUrl(null)}
+                  type="button"
+                >
+                  削除
+                </button>
+              ) : null}
+            </div>
             <label>
               <span>権限</span>
               <select
                 onChange={(event) =>
-                  setInviteRole(event.target.value as "member" | "admin")
+                  setAccountRole(event.target.value as "member" | "admin")
                 }
-                value={inviteRole}
+                value={accountRole}
               >
                 <option value="member">メンバー</option>
                 <option value="admin">管理者</option>
               </select>
             </label>
-            <button className="button button-primary" disabled={inviting}>
-              <MailPlus aria-hidden="true" />
-              {inviting ? "送信中..." : "招待メールを送る"}
+            <button className="button button-primary" disabled={creatingAccount}>
+              <ImagePlus aria-hidden="true" />
+              {creatingAccount ? "発行中..." : "アカウントを発行"}
             </button>
           </form>
         </article>
@@ -539,7 +630,17 @@ export function AdminPage() {
                     {item.delta > 0 ? "+" : ""}
                     {formatNumber(item.delta)}
                   </strong>
-                  <div>
+                  <div className="adjustment-user">
+                    <ProfileAvatar
+                      name={
+                        item.profiles?.display_name ||
+                        item.profiles?.email ||
+                        "管理者"
+                      }
+                      src={item.profiles?.avatar_url}
+                      size="sm"
+                    />
+                    <div>
                     <span>
                       {item.profiles?.display_name ||
                         item.profiles?.email ||
@@ -549,6 +650,7 @@ export function AdminPage() {
                       {formatDateTime(item.created_at)}
                       {item.reason ? ` / ${item.reason}` : ""}
                     </p>
+                    </div>
                   </div>
                 </div>
               ))
@@ -584,8 +686,17 @@ export function AdminPage() {
                 {sortedUsers.map((item) => (
                   <tr key={item.id}>
                     <td>
-                      <strong>{item.displayName || item.email}</strong>
-                      <span>{item.email}</span>
+                      <div className="user-cell">
+                        <ProfileAvatar
+                          name={item.displayName || item.email}
+                          src={item.avatarUrl}
+                        />
+                        <div>
+                          <strong>{item.displayName || item.email}</strong>
+                          <span>{item.email}</span>
+                          {item.companyName ? <span>{item.companyName}</span> : null}
+                        </div>
+                      </div>
                     </td>
                     <td>
                       <select

@@ -18,9 +18,10 @@ import type {
 import { formatDate, formatDateTime, formatNumber, daysUntil } from "../lib/format";
 import { getSupabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
+import { ProfileAvatar } from "../components/ProfileAvatar";
 
 type EventWithProfile = ThankYouEvent & {
-  profiles: Pick<Profile, "display_name" | "email"> | null;
+  profiles: Pick<Profile, "display_name" | "email" | "company_name" | "avatar_url"> | null;
 };
 
 type RealtimeStatus = "connecting" | "connected" | "disconnected";
@@ -85,7 +86,7 @@ export function DashboardPage() {
     const { data, error: eventsError } = await client
       .from("thank_you_events")
       .select(
-        "id, period_id, user_id, created_at, profiles:profiles!thank_you_events_user_id_fkey(display_name,email)",
+        "id, period_id, user_id, created_at, profiles:profiles!thank_you_events_user_id_fkey(display_name,email,company_name,avatar_url)",
       )
       .eq("period_id", periodId)
       .order("created_at", { ascending: false })
@@ -223,7 +224,15 @@ export function DashboardPage() {
   const ranking = useMemo(() => {
     const result = new Map<
       string,
-      { userId: string; name: string; email?: string; count: number; lastAt: string }
+      {
+        userId: string;
+        name: string;
+        email?: string;
+        companyName?: string;
+        avatarUrl?: string;
+        count: number;
+        lastAt: string;
+      }
     >();
 
     for (const event of events) {
@@ -236,6 +245,8 @@ export function DashboardPage() {
           userId: event.user_id,
           name: nameForEvent(event),
           email: event.profiles?.email ?? undefined,
+          companyName: event.profiles?.company_name ?? undefined,
+          avatarUrl: event.profiles?.avatar_url ?? undefined,
           count: 1,
           lastAt: event.created_at,
         });
@@ -417,9 +428,13 @@ export function DashboardPage() {
               ranking.map((entry, index) => (
                 <li key={entry.userId}>
                   <span className="rank-number">{formatNumber(index + 1)}</span>
+                  <ProfileAvatar name={entry.name} src={entry.avatarUrl} size="sm" />
                   <div>
                     <strong>{entry.name}</strong>
-                    <span>{formatDateTime(entry.lastAt)} 更新</span>
+                    <span>
+                      {entry.companyName ? `${entry.companyName} / ` : ""}
+                      {formatDateTime(entry.lastAt)} 更新
+                    </span>
                   </div>
                   <em>{formatNumber(entry.count)}</em>
                 </li>
@@ -441,10 +456,19 @@ export function DashboardPage() {
           <div className="timeline">
             {events.slice(0, 8).map((event) => (
               <div className="timeline-row" key={event.id}>
-                <span />
+                <ProfileAvatar
+                  name={nameForEvent(event)}
+                  src={event.profiles?.avatar_url}
+                  size="sm"
+                />
                 <div>
                   <strong>{nameForEvent(event)}</strong>
-                  <p>{formatDateTime(event.created_at)}</p>
+                  <p>
+                    {event.profiles?.company_name
+                      ? `${event.profiles.company_name} / `
+                      : ""}
+                    {formatDateTime(event.created_at)}
+                  </p>
                 </div>
               </div>
             ))}

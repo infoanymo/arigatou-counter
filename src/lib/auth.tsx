@@ -59,6 +59,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         id: currentUser.id,
         email: currentUser.email ?? "",
         display_name: fallbackName(currentUser.email),
+        company_name: null,
+        avatar_url: null,
         status: "active",
         created_at: currentUser.created_at,
         updated_at: currentUser.updated_at ?? currentUser.created_at,

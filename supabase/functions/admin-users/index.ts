@@ -36,6 +36,13 @@ function cleanStatus(value: unknown): Status | null {
   return null;
 }
 
+function cleanAvatarUrl(value: unknown) {
+  const text = cleanText(value);
+  if (!text) return null;
+  if (text.startsWith("data:image/") || text.startsWith("https://")) return text;
+  return null;
+}
+
 function cleanInteger(value: unknown): number | null {
   const parsed =
     typeof value === "number"
@@ -149,7 +156,7 @@ Deno.serve(async (req) => {
     const { data: profiles } = ids.length
       ? await admin
           .from("profiles")
-          .select("id,email,display_name,status")
+          .select("id,email,display_name,company_name,avatar_url,status")
           .in("id", ids)
       : { data: [] };
 
@@ -164,6 +171,8 @@ Deno.serve(async (req) => {
           id: item.id,
           email: item.email ?? profile?.email ?? "",
           displayName: profile?.display_name ?? null,
+          companyName: profile?.company_name ?? null,
+          avatarUrl: profile?.avatar_url ?? null,
           role: cleanRole(item.app_metadata?.role),
           status: (profile?.status ?? "active") as Status,
           createdAt: item.created_at,
@@ -171,6 +180,72 @@ Deno.serve(async (req) => {
         };
       }),
     });
+  }
+
+  if (action === "create-user") {
+    const email = cleanEmail(body.email);
+    const password = cleanText(body.password);
+    const displayName = cleanText(body.displayName);
+    const companyName = cleanText(body.companyName) || null;
+    const avatarUrl = cleanAvatarUrl(body.avatarUrl);
+    const role = cleanRole(body.role);
+
+    if (!email || !email.includes("@")) {
+      return json({ error: "Valid email is required." }, 400);
+    }
+
+    if (password.length < 6) {
+      return json({ error: "Password must be at least 6 characters." }, 400);
+    }
+
+    if (!displayName) {
+      return json({ error: "Display name is required." }, 400);
+    }
+
+    if (avatarUrl && avatarUrl.length > 600_000) {
+      return json({ error: "Avatar image is too large." }, 400);
+    }
+
+    const { data, error } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      app_metadata: { role },
+      user_metadata: {
+        display_name: displayName,
+        company_name: companyName,
+      },
+    });
+
+    if (error || !data.user) {
+      return json({ error: error?.message ?? "Create user failed." }, 400);
+    }
+
+    const { error: roleError } = await admin.auth.admin.updateUserById(
+      data.user.id,
+      {
+        app_metadata: {
+          ...data.user.app_metadata,
+          role,
+        },
+      },
+    );
+
+    if (roleError) return json({ error: roleError.message }, 400);
+
+    await admin.from("profiles").upsert(
+      {
+        id: data.user.id,
+        email,
+        display_name: displayName,
+        company_name: companyName,
+        avatar_url: avatarUrl,
+        status: "active",
+      },
+      { onConflict: "id" },
+    );
+
+    return json({ ok: true });
   }
 
   if (action === "invite") {
@@ -216,6 +291,8 @@ Deno.serve(async (req) => {
         id: data.user.id,
         email,
         display_name: displayName,
+        company_name: null,
+        avatar_url: null,
         status: "active",
       },
       { onConflict: "id" },
