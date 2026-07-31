@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { HeartHandshake } from "lucide-react";
-import okiariLogo from "../okiari-logo.jpg";
+import okiariLogo from "../okiari-logo-clean.jpg";
 import { useAuth } from "../lib/auth";
 import { isSupabaseConfigured } from "../lib/supabase";
 
