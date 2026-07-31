@@ -69,7 +69,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
             <HeartHandshake aria-hidden="true" />
           </span>
           <div>
-            <strong>ありがとうカウンター</strong>
+            <strong>オキアリ</strong>
             <span>今期の声を集める場所</span>
           </div>
         </div>

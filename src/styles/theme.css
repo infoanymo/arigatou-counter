@@ -20,9 +20,128 @@ body {
 }
 
 .login-page {
-  background:
-    linear-gradient(135deg, rgba(0, 45, 85, 0.13), transparent 42%),
-    linear-gradient(180deg, #ffffff, #f4f7fa);
+  display: grid;
+  min-height: 100vh;
+  grid-template-columns: 1fr;
+  place-items: center;
+  background: linear-gradient(180deg, #edf4fa 0%, #f8fbfe 100%);
+  padding: clamp(24px, 7vh, 80px) 22px;
+}
+
+.login-panel {
+  position: relative;
+  display: grid;
+  width: min(720px, 100%);
+  gap: 28px;
+  align-self: auto;
+  justify-self: auto;
+  overflow: hidden;
+  margin: 0;
+  border: 1px solid #d5e0eb;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 30px 80px rgba(0, 45, 85, 0.12);
+  padding: clamp(34px, 5vw, 56px) clamp(24px, 5vw, 48px) 44px;
+}
+
+.login-panel::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 8px;
+  background: var(--teal);
+  content: "";
+}
+
+.login-logo-area {
+  display: grid;
+  width: min(500px, 100%);
+  height: clamp(118px, 15vw, 172px);
+  place-items: center;
+  justify-self: center;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #06101a;
+}
+
+.login-logo-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  transform: scale(1.16);
+}
+
+.login-divider {
+  height: 1px;
+  background: #d6e0ea;
+}
+
+.login-copy {
+  display: grid;
+  gap: 6px;
+  text-align: center;
+}
+
+.login-copy p {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.login-copy h2 {
+  color: var(--teal);
+  font-size: clamp(1.4rem, 3vw, 1.8rem);
+}
+
+.login-form {
+  display: grid;
+  gap: 20px;
+}
+
+.login-field {
+  gap: 9px;
+  color: #5f6f83;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.login-field input {
+  min-height: 60px;
+  border-color: #bed2e6;
+  border-radius: 8px;
+  background: #e8f2ff;
+  color: #0b111c;
+  font-size: clamp(1rem, 2.4vw, 1.35rem);
+  font-weight: 900;
+  padding: 0 20px;
+}
+
+.login-form .button-primary {
+  min-height: 64px;
+  margin-top: 10px;
+  border-radius: 8px;
+  background: var(--teal);
+  font-size: clamp(1.05rem, 2.4vw, 1.3rem);
+  box-shadow: none;
+}
+
+.login-form .button-primary:not(:disabled):hover {
+  background: var(--teal-dark);
+}
+
+.login-form .form-message {
+  margin: 0;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
 }
 
 .hero-metrics {

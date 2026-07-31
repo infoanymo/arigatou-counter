@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { HeartHandshake, LockKeyhole, Mail, Sparkles } from "lucide-react";
+import { HeartHandshake } from "lucide-react";
+import okiariLogo from "../okiari-logo.jpg";
 import { useAuth } from "../lib/auth";
 import { isSupabaseConfigured } from "../lib/supabase";
 
@@ -95,50 +96,30 @@ export function LoginPage() {
 
   return (
     <main className="login-page">
-      <section className="login-hero" aria-label="サービス紹介">
-        <div className="brand-lockup">
-          <span className="brand-mark">
-            <HeartHandshake aria-hidden="true" />
-          </span>
-          <div>
-            <p className="eyebrow">Customer Thanks Tracker</p>
-            <h1>ありがとうカウンター</h1>
-          </div>
+      <section className="login-panel" aria-label="ログイン">
+        <div className="login-logo-area">
+          <img className="login-logo-image" src={okiariLogo} alt="オキアリ" />
+          <h1 className="sr-only">オキアリ</h1>
         </div>
-        <p>
-          お客様から届いた「ありがとう」を、チーム全員で同じ数字として見られる管理画面です。
-        </p>
-        <div className="hero-metrics" aria-label="画面の雰囲気">
-          <span>今期目標</span>
-          <strong>10,000</strong>
-          <span>リアルタイム更新</span>
-        </div>
-      </section>
+        <div className="login-divider" />
 
-      <section className="login-panel">
         {passwordSetupMode && user ? (
           <>
-            <div className="panel-heading">
-              <Sparkles aria-hidden="true" />
-              <div>
-                <p className="eyebrow">招待を受け取りました</p>
-                <h2>パスワードを設定</h2>
-              </div>
+            <div className="login-copy">
+              <p>招待を受け取りました</p>
+              <h2>パスワードを設定</h2>
             </div>
-            <form className="form-stack" onSubmit={handlePasswordSetup}>
-              <label>
+            <form className="login-form" onSubmit={handlePasswordSetup}>
+              <label className="login-field">
                 <span>新しいパスワード</span>
-                <div className="input-shell">
-                  <LockKeyhole aria-hidden="true" />
-                  <input
-                    autoComplete="new-password"
-                    minLength={8}
-                    onChange={(event) => setNewPassword(event.target.value)}
-                    required
-                    type="password"
-                    value={newPassword}
-                  />
-                </div>
+                <input
+                  autoComplete="new-password"
+                  minLength={8}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                  required
+                  type="password"
+                  value={newPassword}
+                />
               </label>
               {message ? <p className="form-message">{message}</p> : null}
               <button className="button button-primary" disabled={submitting}>
@@ -148,40 +129,27 @@ export function LoginPage() {
           </>
         ) : (
           <>
-            <div className="panel-heading">
-              <LockKeyhole aria-hidden="true" />
-              <div>
-                <p className="eyebrow">ログイン</p>
-                <h2>アカウントで入る</h2>
-              </div>
-            </div>
-            <form className="form-stack" onSubmit={handleLogin}>
-              <label>
-                <span>メールアドレス</span>
-                <div className="input-shell">
-                  <Mail aria-hidden="true" />
-                  <input
-                    autoComplete="email"
-                    inputMode="email"
-                    onChange={(event) => setEmail(event.target.value)}
-                    required
-                    type="email"
-                    value={email}
-                  />
-                </div>
+            <form className="login-form" onSubmit={handleLogin}>
+              <label className="login-field">
+                <span>ID</span>
+                <input
+                  autoComplete="email"
+                  inputMode="email"
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                  type="email"
+                  value={email}
+                />
               </label>
-              <label>
+              <label className="login-field">
                 <span>パスワード</span>
-                <div className="input-shell">
-                  <LockKeyhole aria-hidden="true" />
-                  <input
-                    autoComplete="current-password"
-                    onChange={(event) => setPasswordValue(event.target.value)}
-                    required
-                    type="password"
-                    value={password}
-                  />
-                </div>
+                <input
+                  autoComplete="current-password"
+                  onChange={(event) => setPasswordValue(event.target.value)}
+                  required
+                  type="password"
+                  value={password}
+                />
               </label>
               {message ? <p className="form-message">{message}</p> : null}
               <button className="button button-primary" disabled={submitting}>
