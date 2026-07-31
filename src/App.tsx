@@ -1,5 +1,14 @@
-import { Navigate, NavLink, Route, Routes } from "react-router-dom";
-import { BarChart3, HeartHandshake, LogOut, Settings, SlidersHorizontal } from "lucide-react";
+import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
+import {
+  BarChart3,
+  ChevronDown,
+  HeartHandshake,
+  LogOut,
+  Settings,
+  SlidersHorizontal,
+  Target,
+  UserRound,
+} from "lucide-react";
 import { AdminPage } from "./pages/AdminPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -61,6 +70,7 @@ function DisabledAccount() {
 
 function AppShell({ children }: { children: React.ReactNode }) {
   const { user, profile, isAdmin, signOut } = useAuth();
+  const location = useLocation();
   const displayName = profile?.display_name || user?.email || "メンバー";
   const roleLabel = isAdmin ? "管理者" : "メンバー";
 
@@ -81,10 +91,28 @@ function AppShell({ children }: { children: React.ReactNode }) {
             <BarChart3 aria-hidden="true" />
             ダッシュボード
           </NavLink>
-          <NavLink to="/settings">
-            <SlidersHorizontal aria-hidden="true" />
-            設定
-          </NavLink>
+          <details
+            className="nav-group"
+            open={location.pathname.startsWith("/settings")}
+          >
+            <summary>
+              <SlidersHorizontal aria-hidden="true" />
+              設定
+              <ChevronDown className="nav-chevron" aria-hidden="true" />
+            </summary>
+            <div className="nav-sublist">
+              <NavLink to="/settings/profile">
+                <UserRound aria-hidden="true" />
+                プロフィール設定
+              </NavLink>
+              {isAdmin ? (
+                <NavLink to="/settings/period">
+                  <Target aria-hidden="true" />
+                  目標設定
+                </NavLink>
+              ) : null}
+            </div>
+          </details>
           {isAdmin ? (
             <NavLink to="/admin">
               <Settings aria-hidden="true" />
@@ -167,9 +195,21 @@ export default function App() {
       />
       <Route
         path="/settings"
+        element={<Navigate to="/settings/profile" replace />}
+      />
+      <Route
+        path="/settings/profile"
         element={
           <RequireAuth>
-            <SettingsPage />
+            <SettingsPage section="profile" />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/settings/period"
+        element={
+          <RequireAuth adminOnly>
+            <SettingsPage section="period" />
           </RequireAuth>
         }
       />

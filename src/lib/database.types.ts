@@ -107,6 +107,68 @@ export type Database = {
           },
         ];
       };
+      thank_you_likes: {
+        Row: {
+          event_id: string;
+          user_id: string;
+          created_at: string;
+        };
+        Insert: {
+          event_id: string;
+          user_id?: string;
+          created_at?: string;
+        };
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: "thank_you_likes_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "thank_you_events";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "thank_you_likes_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      thank_you_comments: {
+        Row: {
+          id: string;
+          event_id: string;
+          user_id: string;
+          body: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          event_id: string;
+          user_id?: string;
+          body: string;
+          created_at?: string;
+        };
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: "thank_you_comments_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "thank_you_events";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "thank_you_comments_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       thank_you_adjustments: {
         Row: {
           id: string;
@@ -153,5 +215,8 @@ export type Database = {
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 export type Period = Database["public"]["Tables"]["periods"]["Row"];
 export type ThankYouEvent = Database["public"]["Tables"]["thank_you_events"]["Row"];
+export type ThankYouLike = Database["public"]["Tables"]["thank_you_likes"]["Row"];
+export type ThankYouComment =
+  Database["public"]["Tables"]["thank_you_comments"]["Row"];
 export type ThankYouAdjustment =
   Database["public"]["Tables"]["thank_you_adjustments"]["Row"];

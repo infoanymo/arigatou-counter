@@ -3,15 +3,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Crown,
   HeartHandshake,
+  MessageCircle,
   Radio,
+  Send,
   Sparkles,
   Target,
+  ThumbsUp,
   Trophy,
 } from "lucide-react";
 import type {
   Period,
   Profile,
   ThankYouAdjustment,
+  ThankYouComment,
   ThankYouEvent,
 } from "../lib/database.types";
 import { formatDate, formatDateTime, formatNumber, daysUntil } from "../lib/format";
@@ -20,6 +24,13 @@ import { useAuth } from "../lib/auth";
 import { ProfileAvatar } from "../components/ProfileAvatar";
 
 type EventWithProfile = ThankYouEvent & {
+  profiles: Pick<
+    Profile,
+    "display_name" | "email" | "company_name" | "avatar_url" | "avatar_scale"
+  > | null;
+};
+
+type CommentWithProfile = ThankYouComment & {
   profiles: Pick<
     Profile,
     "display_name" | "email" | "company_name" | "avatar_url" | "avatar_scale"
@@ -75,13 +86,82 @@ export function DashboardPage() {
   const [period, setPeriod] = useState<Period | null>(null);
   const [events, setEvents] = useState<EventWithProfile[]>([]);
   const [adjustments, setAdjustments] = useState<ThankYouAdjustment[]>([]);
+  const [likesByEvent, setLikesByEvent] = useState<
+    Record<string, { count: number; likedByMe: boolean }>
+  >({});
+  const [commentsByEvent, setCommentsByEvent] = useState<
+    Record<string, CommentWithProfile[]>
+  >({});
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [savingCommentId, setSavingCommentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [realtimeStatus, setRealtimeStatus] =
     useState<RealtimeStatus>("connecting");
   const [bursts, setBursts] = useState<Array<{ id: number; left: number }>>([]);
   const burstId = useRef(0);
+
+  const loadInteractions = useCallback(
+    async (eventIds: string[]) => {
+      const client = getSupabase();
+
+      if (!eventIds.length) {
+        setLikesByEvent({});
+        setCommentsByEvent({});
+        return;
+      }
+
+      const [likesResult, commentsResult] = await Promise.all([
+        client
+          .from("thank_you_likes")
+          .select("event_id,user_id")
+          .in("event_id", eventIds),
+        client
+          .from("thank_you_comments")
+          .select(
+            "id,event_id,user_id,body,created_at,profiles:profiles!thank_you_comments_user_id_fkey(display_name,email,company_name,avatar_url,avatar_scale)",
+          )
+          .in("event_id", eventIds)
+          .order("created_at", { ascending: true })
+          .returns<CommentWithProfile[]>(),
+      ]);
+
+      if (likesResult.error || commentsResult.error) {
+        setError("いいね・コメントを読み込めませんでした。");
+        return;
+      }
+
+      const nextLikes = Object.fromEntries(
+        eventIds.map((eventId) => [
+          eventId,
+          { count: 0, likedByMe: false },
+        ]),
+      ) as Record<string, { count: number; likedByMe: boolean }>;
+
+      for (const like of likesResult.data ?? []) {
+        const current = nextLikes[like.event_id] ?? { count: 0, likedByMe: false };
+        current.count += 1;
+        if (like.user_id === user?.id) current.likedByMe = true;
+        nextLikes[like.event_id] = current;
+      }
+
+      const nextComments = Object.fromEntries(
+        eventIds.map((eventId) => [eventId, []]),
+      ) as Record<string, CommentWithProfile[]>;
+
+      for (const comment of commentsResult.data ?? []) {
+        nextComments[comment.event_id] = [
+          ...(nextComments[comment.event_id] ?? []),
+          comment,
+        ];
+      }
+
+      setLikesByEvent(nextLikes);
+      setCommentsByEvent(nextComments);
+    },
+    [user?.id],
+  );
 
   const loadEvents = useCallback(async (periodId: string) => {
     const client = getSupabase();
@@ -100,8 +180,10 @@ export function DashboardPage() {
       return;
     }
 
-    setEvents(data ?? []);
-  }, []);
+    const nextEvents = data ?? [];
+    setEvents(nextEvents);
+    await loadInteractions(nextEvents.slice(0, 8).map((event) => event.id));
+  }, [loadInteractions]);
 
   const loadAdjustments = useCallback(async (periodId: string) => {
     const client = getSupabase();
@@ -169,7 +251,7 @@ export function DashboardPage() {
       .on(
         "postgres_changes",
         {
-          event: "INSERT",
+          event: "*",
           schema: "public",
           table: "thank_you_events",
           filter: `period_id=eq.${period.id}`,
@@ -182,7 +264,7 @@ export function DashboardPage() {
       .on(
         "postgres_changes",
         {
-          event: "INSERT",
+          event: "*",
           schema: "public",
           table: "thank_you_adjustments",
           filter: `period_id=eq.${period.id}`,
@@ -207,6 +289,40 @@ export function DashboardPage() {
       void client.removeChannel(channel);
     };
   }, [loadAdjustments, loadEvents, period]);
+
+  const recentEvents = useMemo(() => events.slice(0, 8), [events]);
+  const recentEventIds = useMemo(
+    () => recentEvents.map((event) => event.id),
+    [recentEvents],
+  );
+  const recentEventKey = recentEventIds.join("|");
+
+  useEffect(() => {
+    if (!period) return undefined;
+
+    const client = getSupabase();
+    const channel = client
+      .channel(`thank-you-interactions:${period.id}:${recentEventKey}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "thank_you_likes" },
+        () => {
+          void loadInteractions(recentEventIds);
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "thank_you_comments" },
+        () => {
+          void loadInteractions(recentEventIds);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void client.removeChannel(channel);
+    };
+  }, [loadInteractions, period, recentEventIds, recentEventKey]);
 
   const eventTotal = events.length;
   const adjustmentTotal = useMemo(
@@ -307,6 +423,54 @@ export function DashboardPage() {
     runCelebration();
     await loadEvents(period.id);
     window.setTimeout(() => setSubmitting(false), 450);
+  }
+
+  async function toggleLike(eventId: string) {
+    const client = getSupabase();
+    const current = likesByEvent[eventId];
+
+    setError(null);
+
+    const result = current?.likedByMe
+      ? await client
+          .from("thank_you_likes")
+          .delete()
+          .eq("event_id", eventId)
+          .eq("user_id", user?.id ?? "")
+      : await client.from("thank_you_likes").insert({ event_id: eventId });
+
+    if (result.error) {
+      setError("いいねを更新できませんでした。");
+      return;
+    }
+
+    await loadInteractions(recentEventIds);
+  }
+
+  async function handleCommentSubmit(
+    event: React.FormEvent<HTMLFormElement>,
+    eventId: string,
+  ) {
+    event.preventDefault();
+    const body = (commentDrafts[eventId] ?? "").trim();
+    if (!body || savingCommentId) return;
+
+    const client = getSupabase();
+    setSavingCommentId(eventId);
+    setError(null);
+
+    const { error: commentError } = await client
+      .from("thank_you_comments")
+      .insert({ event_id: eventId, body });
+
+    if (commentError) {
+      setError("コメントを登録できませんでした。");
+    } else {
+      setCommentDrafts((current) => ({ ...current, [eventId]: "" }));
+      await loadInteractions(recentEventIds);
+    }
+
+    setSavingCommentId(null);
   }
 
   if (loading) {
@@ -457,23 +621,88 @@ export function DashboardPage() {
             </div>
           </div>
           <div className="timeline">
-            {events.slice(0, 8).map((event) => (
-              <div className="timeline-row" key={event.id}>
-                <ProfileAvatar
-                  name={nameForEvent(event)}
-                  src={event.profiles?.avatar_url}
-                  avatarScale={event.profiles?.avatar_scale}
-                  size="sm"
-                />
-                <div>
-                  <strong>{nameForEvent(event)}</strong>
-                  <p>
-                    {event.profiles?.company_name
-                      ? `${event.profiles.company_name} / `
-                      : ""}
-                    {formatDateTime(event.created_at)}
-                  </p>
+            {recentEvents.map((event) => (
+              <div className="timeline-card" key={event.id}>
+                <div className="timeline-row">
+                  <ProfileAvatar
+                    name={nameForEvent(event)}
+                    src={event.profiles?.avatar_url}
+                    avatarScale={event.profiles?.avatar_scale}
+                    size="sm"
+                  />
+                  <div>
+                    <strong>{nameForEvent(event)}</strong>
+                    <p>
+                      {event.profiles?.company_name
+                        ? `${event.profiles.company_name} / `
+                        : ""}
+                      {formatDateTime(event.created_at)}
+                    </p>
+                  </div>
                 </div>
+                <div className="interaction-row">
+                  <button
+                    className={`mini-action ${
+                      likesByEvent[event.id]?.likedByMe ? "active" : ""
+                    }`}
+                    onClick={() => void toggleLike(event.id)}
+                    type="button"
+                  >
+                    <ThumbsUp aria-hidden="true" />
+                    {formatNumber(likesByEvent[event.id]?.count ?? 0)}
+                  </button>
+                  <span>
+                    <MessageCircle aria-hidden="true" />
+                    {formatNumber(commentsByEvent[event.id]?.length ?? 0)}
+                  </span>
+                </div>
+                <div className="comment-list">
+                  {(commentsByEvent[event.id] ?? []).map((comment) => {
+                    const commenter =
+                      comment.profiles?.display_name ||
+                      comment.profiles?.email ||
+                      "メンバー";
+                    return (
+                      <div className="comment-row" key={comment.id}>
+                        <ProfileAvatar
+                          name={commenter}
+                          src={comment.profiles?.avatar_url}
+                          avatarScale={comment.profiles?.avatar_scale}
+                          size="sm"
+                        />
+                        <div>
+                          <strong>{commenter}</strong>
+                          <p>{comment.body}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <form
+                  className="comment-form"
+                  onSubmit={(formEvent) => void handleCommentSubmit(formEvent, event.id)}
+                >
+                  <input
+                    maxLength={500}
+                    onChange={(inputEvent) =>
+                      setCommentDrafts((current) => ({
+                        ...current,
+                        [event.id]: inputEvent.target.value,
+                      }))
+                    }
+                    placeholder="コメントを書く"
+                    value={commentDrafts[event.id] ?? ""}
+                  />
+                  <button
+                    className="icon-button"
+                    disabled={savingCommentId === event.id}
+                    type="submit"
+                    aria-label="コメントを送信"
+                    title="コメントを送信"
+                  >
+                    <Send aria-hidden="true" />
+                  </button>
+                </form>
               </div>
             ))}
             {!events.length ? (

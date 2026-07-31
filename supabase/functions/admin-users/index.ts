@@ -384,5 +384,38 @@ Deno.serve(async (req) => {
     return json({ ok: true });
   }
 
+  if (action === "clear-thank-yous") {
+    const periodId = cleanText(body.periodId);
+
+    if (!periodId) {
+      return json({ error: "Valid period id is required." }, 400);
+    }
+
+    const { data: period, error: periodError } = await admin
+      .from("periods")
+      .select("id,is_active")
+      .eq("id", periodId)
+      .single();
+
+    if (periodError || !period?.is_active) {
+      return json({ error: "Active period not found." }, 404);
+    }
+
+    const { error: adjustmentError } = await admin
+      .from("thank_you_adjustments")
+      .delete()
+      .eq("period_id", periodId);
+
+    if (adjustmentError) return json({ error: adjustmentError.message }, 400);
+
+    const { error: eventError } = await admin
+      .from("thank_you_events")
+      .delete()
+      .eq("period_id", periodId);
+
+    if (eventError) return json({ error: eventError.message }, 400);
+    return json({ ok: true });
+  }
+
   return json({ error: "Unknown action." }, 400);
 });

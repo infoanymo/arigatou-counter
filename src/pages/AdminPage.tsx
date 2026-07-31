@@ -2,11 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Building2,
   Calculator,
-  CalendarDays,
   ImagePlus,
   KeyRound,
   RefreshCcw,
-  ShieldCheck,
+  Trash2,
   UserRound,
   UserCog,
 } from "lucide-react";
@@ -116,9 +115,9 @@ export function AdminPage() {
   const [adjustmentDelta, setAdjustmentDelta] = useState("");
   const [adjustmentReason, setAdjustmentReason] = useState("");
   const [loading, setLoading] = useState(true);
-  const [savingPeriod, setSavingPeriod] = useState(false);
   const [creatingAccount, setCreatingAccount] = useState(false);
   const [savingAdjustment, setSavingAdjustment] = useState(false);
+  const [clearingThankYous, setClearingThankYous] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const adjustmentTotal = useMemo(
@@ -218,42 +217,6 @@ export function AdminPage() {
     void loadAdmin();
   }, [loadAdmin]);
 
-  async function handlePeriodSave(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const client = getSupabase();
-    const target = parseIntegerInput(periodForm.target_count);
-
-    if (!Number.isInteger(target) || target <= 0) {
-      setMessage("目標数は1以上の整数で入力してください。");
-      return;
-    }
-
-    setSavingPeriod(true);
-    setMessage(null);
-
-    const payload = {
-      name: periodForm.name.trim() || "今期",
-      starts_on: periodForm.starts_on,
-      ends_on: periodForm.ends_on,
-      target_count: target,
-      is_active: true,
-      updated_at: new Date().toISOString(),
-    };
-
-    const result = periodForm.id
-      ? await client.from("periods").update(payload).eq("id", periodForm.id)
-      : await client.from("periods").insert(payload).select("*").single();
-
-    if (result.error) {
-      setMessage("期設定を保存できませんでした。");
-    } else {
-      setMessage("期設定を保存しました。");
-      await loadAdmin();
-    }
-
-    setSavingPeriod(false);
-  }
-
   async function handleCreateAccount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setCreatingAccount(true);
@@ -341,6 +304,35 @@ export function AdminPage() {
     setSavingAdjustment(false);
   }
 
+  async function handleClearThankYous() {
+    if (!periodForm.id || clearingThankYous) return;
+
+    const confirmed = window.confirm(
+      "今期のありがとう、いいね、コメント、補正履歴をすべて削除します。元に戻せません。実行しますか？",
+    );
+    if (!confirmed) return;
+
+    setClearingThankYous(true);
+    setMessage(null);
+
+    try {
+      await invokeAdmin({
+        action: "clear-thank-yous",
+        periodId: periodForm.id,
+      });
+      setMessage("今期のありがとうをすべて削除しました。");
+      await loadAdmin();
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "ありがとうを削除できませんでした。",
+      );
+    } finally {
+      setClearingThankYous(false);
+    }
+  }
+
   async function updateUser(
     targetUser: AdminUser,
     action: "set-role" | "set-status",
@@ -369,7 +361,7 @@ export function AdminPage() {
         <div>
           <p className="eyebrow">Admin</p>
           <h1>管理</h1>
-          <p>期の目標、アカウント発行、権限、件数補正を管理します。</p>
+          <p>アカウント発行、権限、件数補正、ありがとう削除を管理します。</p>
         </div>
         <button className="button button-secondary" onClick={() => void loadAdmin()}>
           <RefreshCcw aria-hidden="true" />
@@ -380,87 +372,6 @@ export function AdminPage() {
       {message ? <p className="notice">{message}</p> : null}
 
       <section className="admin-grid">
-        <article className="panel">
-          <div className="panel-title">
-            <CalendarDays aria-hidden="true" />
-            <div>
-              <p className="eyebrow">Period</p>
-              <h2>今期目標</h2>
-            </div>
-          </div>
-          <form className="form-stack" onSubmit={handlePeriodSave}>
-            <label>
-              <span>期の名前</span>
-              <input
-                onChange={(event) =>
-                  setPeriodForm((current) => ({
-                    ...current,
-                    name: event.target.value,
-                  }))
-                }
-                required
-                value={periodForm.name}
-              />
-            </label>
-            <div className="form-grid">
-              <label>
-                <span>開始日</span>
-                <input
-                  onChange={(event) =>
-                    setPeriodForm((current) => ({
-                      ...current,
-                      starts_on: event.target.value,
-                    }))
-                  }
-                  required
-                  type="date"
-                  value={periodForm.starts_on}
-                />
-              </label>
-              <label>
-                <span>終了日</span>
-                <input
-                  onChange={(event) =>
-                    setPeriodForm((current) => ({
-                      ...current,
-                      ends_on: event.target.value,
-                    }))
-                  }
-                  required
-                  type="date"
-                  value={periodForm.ends_on}
-                />
-              </label>
-            </div>
-            <label>
-              <span>目標数</span>
-              <input
-                inputMode="numeric"
-                min={1}
-                onChange={(event) =>
-                  setPeriodForm((current) => ({
-                    ...current,
-                    target_count: event.target.value,
-                  }))
-                }
-                onBlur={() =>
-                  setPeriodForm((current) => ({
-                    ...current,
-                    target_count: formatIntegerInput(current.target_count),
-                  }))
-                }
-                required
-                type="text"
-                value={periodForm.target_count}
-              />
-            </label>
-            <button className="button button-primary" disabled={savingPeriod}>
-              <ShieldCheck aria-hidden="true" />
-              {savingPeriod ? "保存中..." : "期設定を保存"}
-            </button>
-          </form>
-        </article>
-
         <article className="panel">
           <div className="panel-title">
             <UserRound aria-hidden="true" />
@@ -610,6 +521,15 @@ export function AdminPage() {
               {savingAdjustment ? "登録中..." : "補正を登録"}
             </button>
           </form>
+          <button
+            className="button button-danger full-width-button"
+            disabled={clearingThankYous || !periodForm.id}
+            onClick={() => void handleClearThankYous()}
+            type="button"
+          >
+            <Trash2 aria-hidden="true" />
+            {clearingThankYous ? "削除中..." : "今期のありがとうを全削除"}
+          </button>
           <div className="adjustment-history">
             {adjustments.length ? (
               adjustments.slice(0, 5).map((item) => (
@@ -630,15 +550,15 @@ export function AdminPage() {
                       size="sm"
                     />
                     <div>
-                    <span>
-                      {item.profiles?.display_name ||
-                        item.profiles?.email ||
-                        "管理者"}
-                    </span>
-                    <p>
-                      {formatDateTime(item.created_at)}
-                      {item.reason ? ` / ${item.reason}` : ""}
-                    </p>
+                      <span>
+                        {item.profiles?.display_name ||
+                          item.profiles?.email ||
+                          "管理者"}
+                      </span>
+                      <p>
+                        {formatDateTime(item.created_at)}
+                        {item.reason ? ` / ${item.reason}` : ""}
+                      </p>
                     </div>
                   </div>
                 </div>

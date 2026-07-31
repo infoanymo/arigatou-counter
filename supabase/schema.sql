@@ -52,6 +52,21 @@ create table if not exists public.thank_you_events (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.thank_you_likes (
+  event_id uuid not null references public.thank_you_events (id) on delete cascade,
+  user_id uuid not null default auth.uid() references public.profiles (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (event_id, user_id)
+);
+
+create table if not exists public.thank_you_comments (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid not null references public.thank_you_events (id) on delete cascade,
+  user_id uuid not null default auth.uid() references public.profiles (id) on delete cascade,
+  body text not null check (char_length(btrim(body)) between 1 and 500),
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.thank_you_adjustments (
   id uuid primary key default gen_random_uuid(),
   period_id uuid not null references public.periods (id) on delete restrict,
@@ -69,6 +84,12 @@ create index if not exists thank_you_events_period_user_idx
   on public.thank_you_events (period_id, user_id);
 create index if not exists thank_you_events_user_idx
   on public.thank_you_events (user_id);
+create index if not exists thank_you_likes_user_idx
+  on public.thank_you_likes (user_id);
+create index if not exists thank_you_comments_event_created_idx
+  on public.thank_you_comments (event_id, created_at asc);
+create index if not exists thank_you_comments_user_idx
+  on public.thank_you_comments (user_id);
 create index if not exists thank_you_adjustments_period_created_idx
   on public.thank_you_adjustments (period_id, created_at desc);
 create index if not exists thank_you_adjustments_admin_user_idx
@@ -181,6 +202,8 @@ where not exists (select 1 from public.periods where is_active = true);
 alter table public.profiles enable row level security;
 alter table public.periods enable row level security;
 alter table public.thank_you_events enable row level security;
+alter table public.thank_you_likes enable row level security;
+alter table public.thank_you_comments enable row level security;
 alter table public.thank_you_adjustments enable row level security;
 
 drop policy if exists "profiles_select_for_active_users_or_self" on public.profiles;
@@ -250,6 +273,50 @@ for select
 to authenticated
 using (app_private.current_user_is_active());
 
+drop policy if exists "thank_you_likes_select_for_active_users" on public.thank_you_likes;
+create policy "thank_you_likes_select_for_active_users"
+on public.thank_you_likes
+for select
+to authenticated
+using (app_private.current_user_is_active());
+
+drop policy if exists "thank_you_likes_insert_own_for_active_users" on public.thank_you_likes;
+create policy "thank_you_likes_insert_own_for_active_users"
+on public.thank_you_likes
+for insert
+to authenticated
+with check (
+  user_id = (select auth.uid())
+  and app_private.current_user_is_active()
+);
+
+drop policy if exists "thank_you_likes_delete_own_for_active_users" on public.thank_you_likes;
+create policy "thank_you_likes_delete_own_for_active_users"
+on public.thank_you_likes
+for delete
+to authenticated
+using (
+  user_id = (select auth.uid())
+  and app_private.current_user_is_active()
+);
+
+drop policy if exists "thank_you_comments_select_for_active_users" on public.thank_you_comments;
+create policy "thank_you_comments_select_for_active_users"
+on public.thank_you_comments
+for select
+to authenticated
+using (app_private.current_user_is_active());
+
+drop policy if exists "thank_you_comments_insert_own_for_active_users" on public.thank_you_comments;
+create policy "thank_you_comments_insert_own_for_active_users"
+on public.thank_you_comments
+for insert
+to authenticated
+with check (
+  user_id = (select auth.uid())
+  and app_private.current_user_is_active()
+);
+
 drop policy if exists "thank_you_adjustments_insert_for_admins" on public.thank_you_adjustments;
 create policy "thank_you_adjustments_insert_for_admins"
 on public.thank_you_adjustments
@@ -269,6 +336,8 @@ with check (
 grant select, update on public.profiles to authenticated;
 grant select, insert, update on public.periods to authenticated;
 grant select, insert on public.thank_you_events to authenticated;
+grant select, insert, delete on public.thank_you_likes to authenticated;
+grant select, insert on public.thank_you_comments to authenticated;
 grant select, insert on public.thank_you_adjustments to authenticated;
 
 do $$
@@ -291,6 +360,26 @@ begin
       and tablename = 'thank_you_adjustments'
   ) then
     alter publication supabase_realtime add table public.thank_you_adjustments;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'thank_you_likes'
+  ) then
+    alter publication supabase_realtime add table public.thank_you_likes;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'thank_you_comments'
+  ) then
+    alter publication supabase_realtime add table public.thank_you_comments;
   end if;
 end;
 $$;

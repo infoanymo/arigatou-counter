@@ -166,7 +166,8 @@ select:focus,
 }
 
 .nav-list a.active,
-.nav-list a:hover {
+.nav-list a:hover,
+.nav-group summary:hover {
   background: rgba(0, 45, 85, 0.1);
 }
 
@@ -182,7 +183,8 @@ select:focus,
 }
 
 .sidebar .brand-lockup.compact strong,
-.sidebar .nav-list a {
+.sidebar .nav-list a,
+.sidebar .nav-group summary {
   color: white;
 }
 
@@ -192,7 +194,18 @@ select:focus,
 }
 
 .sidebar .nav-list a.active,
-.sidebar .nav-list a:hover {
+.sidebar .nav-list a:hover,
+.sidebar .nav-group summary:hover {
+  color: #002d55;
+  background: white;
+}
+
+.sidebar .nav-sublist a {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.sidebar .nav-sublist a.active,
+.sidebar .nav-sublist a:hover {
   color: #002d55;
   background: white;
 }
