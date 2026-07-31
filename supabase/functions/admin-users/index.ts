@@ -38,8 +38,20 @@ function cleanStatus(value: unknown): Status | null {
 
 function siteUrl(req: Request) {
   const configuredUrl = Deno.env.get("APP_URL")?.trim();
+  if (configuredUrl) return configuredUrl.replace(/\/$/, "");
+
+  const referer = req.headers.get("referer")?.trim();
+  if (referer) {
+    try {
+      const url = new URL(referer);
+      return `${url.origin}${url.pathname}`.replace(/\/$/, "");
+    } catch {
+      // Fall back to the origin header below.
+    }
+  }
+
   const origin = req.headers.get("origin")?.trim();
-  return (configuredUrl || origin || "").replace(/\/$/, "");
+  return (origin || "").replace(/\/$/, "");
 }
 
 function getAdminKey() {
