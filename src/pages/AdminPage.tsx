@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Calculator,
   CalendarDays,
   MailPlus,
   RefreshCcw,
   ShieldCheck,
   UserCog,
 } from "lucide-react";
-import type { Period, ProfileStatus } from "../lib/database.types";
+import type {
+  Period,
+  Profile,
+  ProfileStatus,
+  ThankYouAdjustment,
+} from "../lib/database.types";
 import { formatDateTime } from "../lib/format";
 import { getSupabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
@@ -27,6 +33,10 @@ type PeriodForm = {
   starts_on: string;
   ends_on: string;
   target_count: string;
+};
+
+type AdjustmentWithProfile = ThankYouAdjustment & {
+  profiles: Pick<Profile, "display_name" | "email"> | null;
 };
 
 const today = new Date().toISOString().slice(0, 10);
@@ -74,13 +84,24 @@ export function AdminPage() {
   const { user, refreshAuth } = useAuth();
   const [periodForm, setPeriodForm] = useState<PeriodForm>(defaultPeriodForm);
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [adjustments, setAdjustments] = useState<AdjustmentWithProfile[]>([]);
+  const [eventCount, setEventCount] = useState(0);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState<"member" | "admin">("member");
+  const [adjustmentDelta, setAdjustmentDelta] = useState("");
+  const [adjustmentReason, setAdjustmentReason] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingPeriod, setSavingPeriod] = useState(false);
   const [inviting, setInviting] = useState(false);
+  const [savingAdjustment, setSavingAdjustment] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  const adjustmentTotal = useMemo(
+    () => adjustments.reduce((sum, item) => sum + item.delta, 0),
+    [adjustments],
+  );
+  const adjustedTotal = Math.max(0, eventCount + adjustmentTotal);
 
   const sortedUsers = useMemo(
     () =>
@@ -91,6 +112,40 @@ export function AdminPage() {
       }),
     [users],
   );
+
+  const loadAdjustmentSummary = useCallback(async (periodId: string) => {
+    const client = getSupabase();
+
+    const { count, error: countError } = await client
+      .from("thank_you_events")
+      .select("*", { count: "exact", head: true })
+      .eq("period_id", periodId);
+
+    if (countError) {
+      setMessage("ありがとう件数を読み込めませんでした。");
+      setEventCount(0);
+    } else {
+      setEventCount(count ?? 0);
+    }
+
+    const { data, error: adjustmentsError } = await client
+      .from("thank_you_adjustments")
+      .select(
+        "id, period_id, admin_user_id, delta, reason, created_at, profiles:profiles!thank_you_adjustments_admin_user_id_fkey(display_name,email)",
+      )
+      .eq("period_id", periodId)
+      .order("created_at", { ascending: false })
+      .limit(30)
+      .returns<AdjustmentWithProfile[]>();
+
+    if (adjustmentsError) {
+      setMessage("補正履歴を読み込めませんでした。");
+      setAdjustments([]);
+      return;
+    }
+
+    setAdjustments(data ?? []);
+  }, []);
 
   const loadAdmin = useCallback(async () => {
     const client = getSupabase();
@@ -107,8 +162,16 @@ export function AdminPage() {
 
     if (periodError) {
       setMessage("期設定を読み込めませんでした。");
+      setAdjustments([]);
+      setEventCount(0);
     } else {
       setPeriodForm(formFromPeriod(period));
+      if (period) {
+        await loadAdjustmentSummary(period.id);
+      } else {
+        setAdjustments([]);
+        setEventCount(0);
+      }
     }
 
     try {
@@ -125,7 +188,7 @@ export function AdminPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadAdjustmentSummary]);
 
   useEffect(() => {
     void loadAdmin();
@@ -191,6 +254,42 @@ export function AdminPage() {
     } finally {
       setInviting(false);
     }
+  }
+
+  async function handleAdjustmentSave(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!periodForm.id) {
+      setMessage("先に期設定を保存してください。");
+      return;
+    }
+
+    const delta = Number(adjustmentDelta);
+    if (!Number.isInteger(delta) || delta === 0) {
+      setMessage("補正数は0以外の整数で入力してください。");
+      return;
+    }
+
+    const client = getSupabase();
+    setSavingAdjustment(true);
+    setMessage(null);
+
+    const { error } = await client.from("thank_you_adjustments").insert({
+      period_id: periodForm.id,
+      delta,
+      reason: adjustmentReason.trim() || null,
+    });
+
+    if (error) {
+      setMessage("補正を登録できませんでした。管理者権限を確認してください。");
+    } else {
+      setAdjustmentDelta("");
+      setAdjustmentReason("");
+      setMessage("ありがとう件数を補正しました。");
+      await loadAdjustmentSummary(periodForm.id);
+    }
+
+    setSavingAdjustment(false);
   }
 
   async function updateUser(
@@ -352,6 +451,86 @@ export function AdminPage() {
               {inviting ? "送信中..." : "招待メールを送る"}
             </button>
           </form>
+        </article>
+
+        <article className="panel">
+          <div className="panel-title">
+            <Calculator aria-hidden="true" />
+            <div>
+              <p className="eyebrow">Adjustment</p>
+              <h2>ありがとう件数調整</h2>
+            </div>
+          </div>
+          <div className="adjustment-summary" aria-label="ありがとう件数の内訳">
+            <div>
+              <span>押下数</span>
+              <strong>{eventCount.toLocaleString("ja-JP")}</strong>
+            </div>
+            <div>
+              <span>補正</span>
+              <strong>
+                {adjustmentTotal > 0 ? "+" : ""}
+                {adjustmentTotal.toLocaleString("ja-JP")}
+              </strong>
+            </div>
+            <div>
+              <span>表示総数</span>
+              <strong>{adjustedTotal.toLocaleString("ja-JP")}</strong>
+            </div>
+          </div>
+          <form className="form-stack" onSubmit={handleAdjustmentSave}>
+            <label>
+              <span>補正数</span>
+              <input
+                inputMode="numeric"
+                onChange={(event) => setAdjustmentDelta(event.target.value)}
+                placeholder="+10 / -3"
+                required
+                type="text"
+                value={adjustmentDelta}
+              />
+            </label>
+            <label>
+              <span>理由</span>
+              <input
+                onChange={(event) => setAdjustmentReason(event.target.value)}
+                placeholder="入力漏れ分など"
+                value={adjustmentReason}
+              />
+            </label>
+            <button
+              className="button button-primary"
+              disabled={savingAdjustment || !periodForm.id}
+            >
+              <Calculator aria-hidden="true" />
+              {savingAdjustment ? "登録中..." : "補正を登録"}
+            </button>
+          </form>
+          <div className="adjustment-history">
+            {adjustments.length ? (
+              adjustments.slice(0, 5).map((item) => (
+                <div className="adjustment-row" key={item.id}>
+                  <strong>
+                    {item.delta > 0 ? "+" : ""}
+                    {item.delta.toLocaleString("ja-JP")}
+                  </strong>
+                  <div>
+                    <span>
+                      {item.profiles?.display_name ||
+                        item.profiles?.email ||
+                        "管理者"}
+                    </span>
+                    <p>
+                      {formatDateTime(item.created_at)}
+                      {item.reason ? ` / ${item.reason}` : ""}
+                    </p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="muted">補正履歴はまだありません。</p>
+            )}
+          </div>
         </article>
       </section>
 

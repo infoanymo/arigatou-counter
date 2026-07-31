@@ -9,7 +9,12 @@ import {
   Target,
   Trophy,
 } from "lucide-react";
-import type { Period, Profile, ThankYouEvent } from "../lib/database.types";
+import type {
+  Period,
+  Profile,
+  ThankYouAdjustment,
+  ThankYouEvent,
+} from "../lib/database.types";
 import { formatDate, formatDateTime, formatNumber, daysUntil } from "../lib/format";
 import { getSupabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
@@ -66,6 +71,7 @@ export function DashboardPage() {
   const { user, profile } = useAuth();
   const [period, setPeriod] = useState<Period | null>(null);
   const [events, setEvents] = useState<EventWithProfile[]>([]);
+  const [adjustments, setAdjustments] = useState<ThankYouAdjustment[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,6 +100,23 @@ export function DashboardPage() {
     setEvents(data ?? []);
   }, []);
 
+  const loadAdjustments = useCallback(async (periodId: string) => {
+    const client = getSupabase();
+    const { data, error: adjustmentsError } = await client
+      .from("thank_you_adjustments")
+      .select("id, period_id, admin_user_id, delta, reason, created_at")
+      .eq("period_id", periodId)
+      .order("created_at", { ascending: false })
+      .returns<ThankYouAdjustment[]>();
+
+    if (adjustmentsError) {
+      setError("ありがとう補正を読み込めませんでした。");
+      return;
+    }
+
+    setAdjustments(data ?? []);
+  }, []);
+
   const loadDashboard = useCallback(async () => {
     const client = getSupabase();
     setLoading(true);
@@ -116,13 +139,17 @@ export function DashboardPage() {
     setPeriod(activePeriod);
 
     if (activePeriod) {
-      await loadEvents(activePeriod.id);
+      await Promise.all([
+        loadEvents(activePeriod.id),
+        loadAdjustments(activePeriod.id),
+      ]);
     } else {
       setEvents([]);
+      setAdjustments([]);
     }
 
     setLoading(false);
-  }, [loadEvents]);
+  }, [loadAdjustments, loadEvents]);
 
   useEffect(() => {
     void loadDashboard();
@@ -149,20 +176,41 @@ export function DashboardPage() {
           void loadEvents(period.id);
         },
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "thank_you_adjustments",
+          filter: `period_id=eq.${period.id}`,
+        },
+        () => {
+          setRealtimeStatus("connected");
+          void loadAdjustments(period.id);
+        },
+      )
       .subscribe((status) => {
         if (status === "SUBSCRIBED") setRealtimeStatus("connected");
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
           setRealtimeStatus("disconnected");
-          window.setTimeout(() => void loadEvents(period.id), 1200);
+          window.setTimeout(() => {
+            void loadEvents(period.id);
+            void loadAdjustments(period.id);
+          }, 1200);
         }
       });
 
     return () => {
       void client.removeChannel(channel);
     };
-  }, [loadEvents, period]);
+  }, [loadAdjustments, loadEvents, period]);
 
-  const total = events.length;
+  const eventTotal = events.length;
+  const adjustmentTotal = useMemo(
+    () => adjustments.reduce((sum, item) => sum + item.delta, 0),
+    [adjustments],
+  );
+  const total = Math.max(0, eventTotal + adjustmentTotal);
   const totalDisplay = useAnimatedNumber(total);
   const myCount = useMemo(
     () => events.filter((event) => event.user_id === user?.id).length,
@@ -339,8 +387,11 @@ export function DashboardPage() {
         </div>
         <div className="stat-tile">
           <Activity aria-hidden="true" />
-          <span>今日までの総数</span>
-          <strong>{formatNumber(total)}</strong>
+          <span>管理補正</span>
+          <strong>
+            {adjustmentTotal > 0 ? "+" : ""}
+            {formatNumber(adjustmentTotal)}
+          </strong>
         </div>
         <div className="stat-tile">
           <Trophy aria-hidden="true" />

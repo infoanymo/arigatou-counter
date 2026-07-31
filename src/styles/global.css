@@ -834,6 +834,76 @@ select:focus {
   overflow: hidden;
 }
 
+.adjustment-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.adjustment-summary div {
+  display: grid;
+  min-height: 86px;
+  align-content: space-between;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  padding: 12px;
+}
+
+.adjustment-summary span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.adjustment-summary strong {
+  color: var(--teal-dark);
+  font-size: 1.55rem;
+  line-height: 1.1;
+}
+
+.adjustment-history {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.adjustment-row {
+  display: grid;
+  min-height: 56px;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.adjustment-row > strong {
+  color: var(--teal-dark);
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.adjustment-row span,
+.adjustment-row p {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adjustment-row span {
+  font-weight: 800;
+}
+
+.adjustment-row p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 .table-wrap {
   overflow-x: auto;
   margin-top: 18px;
@@ -953,6 +1023,7 @@ td select {
   .action-band,
   .content-grid,
   .admin-grid,
+  .adjustment-summary,
   .stat-grid {
     grid-template-columns: 1fr;
   }

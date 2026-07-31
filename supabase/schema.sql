@@ -30,6 +30,15 @@ create table if not exists public.thank_you_events (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.thank_you_adjustments (
+  id uuid primary key default gen_random_uuid(),
+  period_id uuid not null references public.periods (id) on delete restrict,
+  admin_user_id uuid not null default auth.uid() references public.profiles (id) on delete restrict,
+  delta integer not null check (delta <> 0),
+  reason text,
+  created_at timestamptz not null default now()
+);
+
 create index if not exists profiles_status_idx on public.profiles (status);
 create index if not exists periods_active_idx on public.periods (is_active, starts_on desc);
 create index if not exists thank_you_events_period_created_idx
@@ -38,6 +47,10 @@ create index if not exists thank_you_events_period_user_idx
   on public.thank_you_events (period_id, user_id);
 create index if not exists thank_you_events_user_idx
   on public.thank_you_events (user_id);
+create index if not exists thank_you_adjustments_period_created_idx
+  on public.thank_you_adjustments (period_id, created_at desc);
+create index if not exists thank_you_adjustments_admin_user_idx
+  on public.thank_you_adjustments (admin_user_id);
 
 create or replace function app_private.touch_updated_at()
 returns trigger
@@ -140,6 +153,7 @@ where not exists (select 1 from public.periods where is_active = true);
 alter table public.profiles enable row level security;
 alter table public.periods enable row level security;
 alter table public.thank_you_events enable row level security;
+alter table public.thank_you_adjustments enable row level security;
 
 drop policy if exists "profiles_select_for_active_users_or_self" on public.profiles;
 create policy "profiles_select_for_active_users_or_self"
@@ -201,9 +215,33 @@ with check (
   )
 );
 
+drop policy if exists "thank_you_adjustments_select_for_active_users" on public.thank_you_adjustments;
+create policy "thank_you_adjustments_select_for_active_users"
+on public.thank_you_adjustments
+for select
+to authenticated
+using (app_private.current_user_is_active());
+
+drop policy if exists "thank_you_adjustments_insert_for_admins" on public.thank_you_adjustments;
+create policy "thank_you_adjustments_insert_for_admins"
+on public.thank_you_adjustments
+for insert
+to authenticated
+with check (
+  admin_user_id = (select auth.uid())
+  and app_private.current_user_is_admin()
+  and exists (
+    select 1
+    from public.periods
+    where periods.id = thank_you_adjustments.period_id
+      and periods.is_active = true
+  )
+);
+
 grant select, update on public.profiles to authenticated;
 grant select, insert, update on public.periods to authenticated;
 grant select, insert on public.thank_you_events to authenticated;
+grant select, insert on public.thank_you_adjustments to authenticated;
 
 do $$
 begin
@@ -215,6 +253,16 @@ begin
       and tablename = 'thank_you_events'
   ) then
     alter publication supabase_realtime add table public.thank_you_events;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'thank_you_adjustments'
+  ) then
+    alter publication supabase_realtime add table public.thank_you_adjustments;
   end if;
 end;
 $$;

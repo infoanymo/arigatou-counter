@@ -98,6 +98,41 @@ export type Database = {
           },
         ];
       };
+      thank_you_adjustments: {
+        Row: {
+          id: string;
+          period_id: string;
+          admin_user_id: string;
+          delta: number;
+          reason: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          period_id: string;
+          admin_user_id?: string;
+          delta: number;
+          reason?: string | null;
+          created_at?: string;
+        };
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: "thank_you_adjustments_period_id_fkey";
+            columns: ["period_id"];
+            isOneToOne: false;
+            referencedRelation: "periods";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "thank_you_adjustments_admin_user_id_fkey";
+            columns: ["admin_user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -109,3 +144,5 @@ export type Database = {
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 export type Period = Database["public"]["Tables"]["periods"]["Row"];
 export type ThankYouEvent = Database["public"]["Tables"]["thank_you_events"]["Row"];
+export type ThankYouAdjustment =
+  Database["public"]["Tables"]["thank_you_adjustments"]["Row"];
