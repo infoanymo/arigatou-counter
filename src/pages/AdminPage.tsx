@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { NavLink } from "react-router-dom";
 import {
   Building2,
   Calculator,
@@ -6,6 +7,7 @@ import {
   KeyRound,
   RefreshCcw,
   Trash2,
+  TriangleAlert,
   UserRound,
   UserCog,
 } from "lucide-react";
@@ -45,6 +47,8 @@ type PeriodForm = {
 type AdjustmentWithProfile = ThankYouAdjustment & {
   profiles: Pick<Profile, "display_name" | "email" | "avatar_url" | "avatar_scale"> | null;
 };
+
+type AdminSection = "account" | "adjustment";
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -100,7 +104,7 @@ async function invokeAdmin<T>(
   return data as T;
 }
 
-export function AdminPage() {
+export function AdminPage({ section }: { section: AdminSection }) {
   const { user, refreshAuth } = useAuth();
   const [periodForm, setPeriodForm] = useState<PeriodForm>(defaultPeriodForm);
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -118,6 +122,7 @@ export function AdminPage() {
   const [creatingAccount, setCreatingAccount] = useState(false);
   const [savingAdjustment, setSavingAdjustment] = useState(false);
   const [clearingThankYous, setClearingThankYous] = useState(false);
+  const [showClearDialog, setShowClearDialog] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const adjustmentTotal = useMemo(
@@ -307,11 +312,6 @@ export function AdminPage() {
   async function handleClearThankYous() {
     if (!periodForm.id || clearingThankYous) return;
 
-    const confirmed = window.confirm(
-      "今期のありがとう、いいね、コメント、補正履歴をすべて削除します。元に戻せません。実行しますか？",
-    );
-    if (!confirmed) return;
-
     setClearingThankYous(true);
     setMessage(null);
 
@@ -321,6 +321,7 @@ export function AdminPage() {
         periodId: periodForm.id,
       });
       setMessage("今期のありがとうをすべて削除しました。");
+      setShowClearDialog(false);
       await loadAdmin();
     } catch (error) {
       setMessage(
@@ -360,8 +361,12 @@ export function AdminPage() {
       <header className="page-header">
         <div>
           <p className="eyebrow">Admin</p>
-          <h1>管理</h1>
-          <p>アカウント発行、権限、件数補正、ありがとう削除を管理します。</p>
+          <h1>{section === "account" ? "アカウント" : "件数調整"}</h1>
+          <p>
+            {section === "account"
+              ? "アカウント発行とユーザー権限を管理します。"
+              : "ありがとう件数の補正と全削除を管理します。"}
+          </p>
         </div>
         <button className="button button-secondary" onClick={() => void loadAdmin()}>
           <RefreshCcw aria-hidden="true" />
@@ -371,108 +376,199 @@ export function AdminPage() {
 
       {message ? <p className="notice">{message}</p> : null}
 
-      <section className="admin-grid">
-        <article className="panel">
-          <div className="panel-title">
-            <UserRound aria-hidden="true" />
-            <div>
-              <p className="eyebrow">Account</p>
-              <h2>アカウント発行</h2>
-            </div>
-          </div>
-          <form className="form-stack" onSubmit={handleCreateAccount}>
-            <label>
-              <span>メールアドレス</span>
-              <input
-                autoComplete="email"
-                inputMode="email"
-                onChange={(event) => setAccountEmail(event.target.value)}
-                required
-                type="email"
-                value={accountEmail}
-              />
-            </label>
-            <label>
-              <span>パスワード</span>
-              <div className="input-shell">
-                <KeyRound aria-hidden="true" />
-                <input
-                  autoComplete="new-password"
-                  minLength={6}
-                  onChange={(event) => setAccountPassword(event.target.value)}
-                  required
-                  type="password"
-                  value={accountPassword}
-                />
-              </div>
-            </label>
-            <label>
-              <span>会社名</span>
-              <div className="input-shell">
-                <Building2 aria-hidden="true" />
-                <input
-                  onChange={(event) => setAccountCompany(event.target.value)}
-                  placeholder="株式会社オキファーム"
-                  value={accountCompany}
-                />
-              </div>
-            </label>
-            <label>
-              <span>表示名</span>
-              <input
-                onChange={(event) => setAccountName(event.target.value)}
-                placeholder="山田 太郎"
-                required
-                value={accountName}
-              />
-            </label>
-            <div className="avatar-picker">
-              <ProfileAvatar
-                name={accountName || accountEmail || "ユーザー"}
-                src={accountAvatarUrl}
-                size="lg"
-              />
-              <label className="avatar-upload">
-                <span>アイコン</span>
-                <input accept="image/*" onChange={handleIconChange} type="file" />
-              </label>
-              {accountAvatarUrl ? (
-                <button
-                  className="button button-secondary"
-                  onClick={() => setAccountAvatarUrl(null)}
-                  type="button"
-                >
-                  削除
-                </button>
-              ) : null}
-            </div>
-            <label>
-              <span>権限</span>
-              <select
-                onChange={(event) =>
-                  setAccountRole(event.target.value as "member" | "admin")
-                }
-                value={accountRole}
-              >
-                <option value="member">メンバー</option>
-                <option value="admin">管理者</option>
-              </select>
-            </label>
-            <button className="button button-primary" disabled={creatingAccount}>
-              <ImagePlus aria-hidden="true" />
-              {creatingAccount ? "発行中..." : "アカウントを発行"}
-            </button>
-          </form>
-        </article>
+      <nav className="admin-tabs" aria-label="管理メニュー">
+        <NavLink to="/admin/account">
+          <UserCog aria-hidden="true" />
+          アカウント
+        </NavLink>
+        <NavLink to="/admin/adjustment">
+          <Calculator aria-hidden="true" />
+          件数調整
+        </NavLink>
+      </nav>
 
-        <article className="panel">
-          <div className="panel-title">
-            <Calculator aria-hidden="true" />
-            <div>
-              <p className="eyebrow">Adjustment</p>
-              <h2>ありがとう件数調整</h2>
+      {section === "account" ? (
+        <>
+          <section className="admin-grid single-column">
+            <article className="panel">
+              <div className="panel-title">
+                <UserRound aria-hidden="true" />
+                <div>
+                  <p className="eyebrow">Account</p>
+                  <h2>アカウント発行</h2>
+                </div>
+              </div>
+              <form className="form-stack" onSubmit={handleCreateAccount}>
+                <label>
+                  <span>メールアドレス</span>
+                  <input
+                    autoComplete="email"
+                    inputMode="email"
+                    onChange={(event) => setAccountEmail(event.target.value)}
+                    required
+                    type="email"
+                    value={accountEmail}
+                  />
+                </label>
+                <label>
+                  <span>パスワード</span>
+                  <div className="input-shell">
+                    <KeyRound aria-hidden="true" />
+                    <input
+                      autoComplete="new-password"
+                      minLength={6}
+                      onChange={(event) => setAccountPassword(event.target.value)}
+                      required
+                      type="password"
+                      value={accountPassword}
+                    />
+                  </div>
+                </label>
+                <label>
+                  <span>会社名</span>
+                  <div className="input-shell">
+                    <Building2 aria-hidden="true" />
+                    <input
+                      onChange={(event) => setAccountCompany(event.target.value)}
+                      placeholder="株式会社オキファーム"
+                      value={accountCompany}
+                    />
+                  </div>
+                </label>
+                <label>
+                  <span>表示名</span>
+                  <input
+                    onChange={(event) => setAccountName(event.target.value)}
+                    placeholder="山田 太郎"
+                    required
+                    value={accountName}
+                  />
+                </label>
+                <div className="avatar-picker">
+                  <ProfileAvatar
+                    name={accountName || accountEmail || "ユーザー"}
+                    src={accountAvatarUrl}
+                    size="lg"
+                  />
+                  <label className="avatar-upload">
+                    <span>アイコン</span>
+                    <input accept="image/*" onChange={handleIconChange} type="file" />
+                  </label>
+                  {accountAvatarUrl ? (
+                    <button
+                      className="button button-secondary"
+                      onClick={() => setAccountAvatarUrl(null)}
+                      type="button"
+                    >
+                      削除
+                    </button>
+                  ) : null}
+                </div>
+                <label>
+                  <span>権限</span>
+                  <select
+                    onChange={(event) =>
+                      setAccountRole(event.target.value as "member" | "admin")
+                    }
+                    value={accountRole}
+                  >
+                    <option value="member">メンバー</option>
+                    <option value="admin">管理者</option>
+                  </select>
+                </label>
+                <button className="button button-primary" disabled={creatingAccount}>
+                  <ImagePlus aria-hidden="true" />
+                  {creatingAccount ? "発行中..." : "アカウントを発行"}
+                </button>
+              </form>
+            </article>
+          </section>
+
+          <section className="panel users-panel">
+            <div className="panel-title">
+              <UserCog aria-hidden="true" />
+              <div>
+                <p className="eyebrow">Users</p>
+                <h2>ユーザー管理</h2>
+              </div>
             </div>
-          </div>
+            {loading ? (
+              <p className="muted">読み込み中...</p>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>ユーザー</th>
+                      <th>権限</th>
+                      <th>状態</th>
+                      <th>最終ログイン</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedUsers.map((item) => (
+                      <tr key={item.id}>
+                        <td>
+                          <div className="user-cell">
+                            <ProfileAvatar
+                              name={item.displayName || item.email}
+                              src={item.avatarUrl}
+                              avatarScale={item.avatarScale}
+                            />
+                            <div>
+                              <strong>{item.displayName || item.email}</strong>
+                              <span>{item.email}</span>
+                              {item.companyName ? <span>{item.companyName}</span> : null}
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <select
+                            disabled={item.id === user?.id}
+                            onChange={(event) =>
+                              void updateUser(item, "set-role", event.target.value)
+                            }
+                            value={item.role}
+                          >
+                            <option value="member">メンバー</option>
+                            <option value="admin">管理者</option>
+                          </select>
+                        </td>
+                        <td>
+                          <select
+                            disabled={item.id === user?.id}
+                            onChange={(event) =>
+                              void updateUser(item, "set-status", event.target.value)
+                            }
+                            value={item.status}
+                          >
+                            <option value="active">有効</option>
+                            <option value="disabled">停止</option>
+                          </select>
+                        </td>
+                        <td>
+                          {item.lastSignInAt
+                            ? formatDateTime(item.lastSignInAt)
+                            : "未ログイン"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </>
+      ) : (
+        <section className="admin-grid single-column">
+          <article className="panel">
+            <div className="panel-title">
+              <Calculator aria-hidden="true" />
+              <div>
+                <p className="eyebrow">Adjustment</p>
+                <h2>ありがとう件数調整</h2>
+              </div>
+            </div>
           <div className="adjustment-summary" aria-label="ありがとう件数の内訳">
             <div>
               <span>押下数</span>
@@ -524,7 +620,7 @@ export function AdminPage() {
           <button
             className="button button-danger full-width-button"
             disabled={clearingThankYous || !periodForm.id}
-            onClick={() => void handleClearThankYous()}
+            onClick={() => setShowClearDialog(true)}
             type="button"
           >
             <Trash2 aria-hidden="true" />
@@ -569,79 +665,49 @@ export function AdminPage() {
           </div>
         </article>
       </section>
+      )}
 
-      <section className="panel users-panel">
-        <div className="panel-title">
-          <UserCog aria-hidden="true" />
-          <div>
-            <p className="eyebrow">Users</p>
-            <h2>ユーザー管理</h2>
-          </div>
+      {showClearDialog ? (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            className="confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="clear-thank-yous-title"
+          >
+            <div className="confirm-icon">
+              <TriangleAlert aria-hidden="true" />
+            </div>
+            <div>
+              <p className="eyebrow">Delete</p>
+              <h2 id="clear-thank-yous-title">今期のありがとうを全削除しますか？</h2>
+              <p>
+                押下されたありがとう、いいね、コメント、補正履歴をすべて削除します。
+                この操作は元に戻せません。
+              </p>
+            </div>
+            <div className="confirm-modal-actions">
+              <button
+                className="button button-secondary"
+                disabled={clearingThankYous}
+                onClick={() => setShowClearDialog(false)}
+                type="button"
+              >
+                キャンセル
+              </button>
+              <button
+                className="button button-danger"
+                disabled={clearingThankYous}
+                onClick={() => void handleClearThankYous()}
+                type="button"
+              >
+                <Trash2 aria-hidden="true" />
+                {clearingThankYous ? "削除中..." : "全削除する"}
+              </button>
+            </div>
+          </section>
         </div>
-        {loading ? (
-          <p className="muted">読み込み中...</p>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>ユーザー</th>
-                  <th>権限</th>
-                  <th>状態</th>
-                  <th>最終ログイン</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedUsers.map((item) => (
-                  <tr key={item.id}>
-                    <td>
-                      <div className="user-cell">
-                        <ProfileAvatar
-                          name={item.displayName || item.email}
-                          src={item.avatarUrl}
-                          avatarScale={item.avatarScale}
-                        />
-                        <div>
-                          <strong>{item.displayName || item.email}</strong>
-                          <span>{item.email}</span>
-                          {item.companyName ? <span>{item.companyName}</span> : null}
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <select
-                        disabled={item.id === user?.id}
-                        onChange={(event) =>
-                          void updateUser(item, "set-role", event.target.value)
-                        }
-                        value={item.role}
-                      >
-                        <option value="member">メンバー</option>
-                        <option value="admin">管理者</option>
-                      </select>
-                    </td>
-                    <td>
-                      <select
-                        disabled={item.id === user?.id}
-                        onChange={(event) =>
-                          void updateUser(item, "set-status", event.target.value)
-                        }
-                        value={item.status}
-                      >
-                        <option value="active">有効</option>
-                        <option value="disabled">停止</option>
-                      </select>
-                    </td>
-                    <td>
-                      {item.lastSignInAt ? formatDateTime(item.lastSignInAt) : "未ログイン"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      ) : null}
     </div>
   );
 }

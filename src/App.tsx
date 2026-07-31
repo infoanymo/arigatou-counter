@@ -1,12 +1,14 @@
 import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import {
   BarChart3,
+  Calculator,
   ChevronDown,
   HeartHandshake,
   LogOut,
   Settings,
   SlidersHorizontal,
   Target,
+  UserCog,
   UserRound,
 } from "lucide-react";
 import { AdminPage } from "./pages/AdminPage";
@@ -114,10 +116,26 @@ function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </details>
           {isAdmin ? (
-            <NavLink to="/admin">
-              <Settings aria-hidden="true" />
-              管理
-            </NavLink>
+            <details
+              className="nav-group"
+              open={location.pathname.startsWith("/admin")}
+            >
+              <summary>
+                <Settings aria-hidden="true" />
+                管理
+                <ChevronDown className="nav-chevron" aria-hidden="true" />
+              </summary>
+              <div className="nav-sublist">
+                <NavLink to="/admin/account">
+                  <UserCog aria-hidden="true" />
+                  アカウント
+                </NavLink>
+                <NavLink to="/admin/adjustment">
+                  <Calculator aria-hidden="true" />
+                  件数調整
+                </NavLink>
+              </div>
+            </details>
           ) : null}
         </nav>
         <div className="account-card">
@@ -187,9 +205,21 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route
         path="/admin"
+        element={<Navigate to="/admin/account" replace />}
+      />
+      <Route
+        path="/admin/account"
         element={
           <RequireAuth adminOnly>
-            <AdminPage />
+            <AdminPage section="account" />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin/adjustment"
+        element={
+          <RequireAuth adminOnly>
+            <AdminPage section="adjustment" />
           </RequireAuth>
         }
       />
