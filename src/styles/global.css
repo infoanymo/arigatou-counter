@@ -117,7 +117,7 @@ p {
 }
 
 .brand-lockup.compact {
-  align-items: flex-start;
+  align-items: center;
 }
 
 .brand-lockup.compact strong {
@@ -149,7 +149,8 @@ p {
 }
 
 .brand-logo-box {
-  width: 92px;
+  width: 160px;
+  height: 72px;
   overflow: hidden;
   border: 1px solid rgba(0, 45, 85, 0.08);
   background: white;
@@ -157,8 +158,8 @@ p {
 
 .brand-logo-box img {
   display: block;
-  width: 88%;
-  height: 88%;
+  width: 92%;
+  height: 92%;
   object-fit: contain;
 }
 

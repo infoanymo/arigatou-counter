@@ -87,10 +87,6 @@ function AppShell({ children }: { children: React.ReactNode }) {
           <span className="brand-mark brand-logo-box">
             <img alt="OkiFra" src={okiariLogo} />
           </span>
-          <div>
-            <strong>オキアリ</strong>
-            <span>今期の声を集める場所</span>
-          </div>
         </div>
         <nav className="nav-list">
           <NavLink to="/" end>
