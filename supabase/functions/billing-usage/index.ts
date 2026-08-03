@@ -127,9 +127,11 @@ Deno.serve(async (req) => {
   }
 
   const managementToken =
+    Deno.env.get("OKIARI_SUPABASE_ACCESS_TOKEN")?.trim() ||
     Deno.env.get("SUPABASE_ACCESS_TOKEN")?.trim() ||
     Deno.env.get("SUPABASE_MANAGEMENT_API_TOKEN")?.trim();
   const projectRef =
+    Deno.env.get("OKIARI_PROJECT_REF")?.trim() ||
     Deno.env.get("SUPABASE_PROJECT_REF")?.trim() || projectRefFromUrl(supabaseUrl);
 
   if (!managementToken || !projectRef) {
@@ -137,8 +139,8 @@ Deno.serve(async (req) => {
       live: false,
       generatedAt: new Date().toISOString(),
       missing: [
-        !managementToken ? "SUPABASE_ACCESS_TOKEN" : null,
-        !projectRef ? "SUPABASE_PROJECT_REF" : null,
+        !managementToken ? "OKIARI_SUPABASE_ACCESS_TOKEN" : null,
+        !projectRef ? "OKIARI_PROJECT_REF" : null,
       ].filter(Boolean),
       message:
         "Supabase Management APIの接続情報が未設定のため、実使用量を取得できません。",
