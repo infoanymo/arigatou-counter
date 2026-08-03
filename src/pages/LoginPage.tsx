@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { HeartHandshake } from "lucide-react";
+import { Eye, EyeOff, HeartHandshake } from "lucide-react";
 import okiariLogo from "../okiari-logo-clean.jpg";
 import { useAuth } from "../lib/auth";
 import { isSupabaseConfigured } from "../lib/supabase";
@@ -45,6 +45,7 @@ export function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPasswordValue] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [passwordSetupRecoveryAttempts, setPasswordSetupRecoveryAttempts] =
@@ -186,14 +187,40 @@ export function LoginPage() {
             <form className="login-form" onSubmit={handlePasswordSetup}>
               <label className="login-field">
                 <span>新しいパスワード</span>
-                <input
-                  autoComplete="new-password"
-                  minLength={8}
-                  onChange={(event) => setNewPassword(event.target.value)}
-                  required
-                  type="password"
-                  value={newPassword}
-                />
+                <span className="password-input-wrap">
+                  <input
+                    autoComplete="new-password"
+                    minLength={8}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                    required
+                    type={showNewPassword ? "text" : "password"}
+                    value={newPassword}
+                  />
+                  <button
+                    aria-label={
+                      showNewPassword
+                        ? "パスワードを非表示にする"
+                        : "パスワードを表示する"
+                    }
+                    aria-pressed={showNewPassword}
+                    className="password-visibility-toggle"
+                    onClick={() =>
+                      setShowNewPassword((isVisible) => !isVisible)
+                    }
+                    title={
+                      showNewPassword
+                        ? "パスワードを非表示にする"
+                        : "パスワードを表示する"
+                    }
+                    type="button"
+                  >
+                    {showNewPassword ? (
+                      <EyeOff aria-hidden="true" />
+                    ) : (
+                      <Eye aria-hidden="true" />
+                    )}
+                  </button>
+                </span>
               </label>
               {message ? <p className="form-message">{message}</p> : null}
               <button className="button button-primary" disabled={submitting}>
