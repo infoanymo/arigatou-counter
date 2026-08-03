@@ -112,6 +112,7 @@ const planBaseMonthlyUsd: Record<keyof typeof planLabels, number | null> = {
   platform: null,
 };
 
+const usdToJpyRate = 158;
 const today = new Date().toISOString().slice(0, 10);
 
 function parseIntegerInput(value: string) {
@@ -127,12 +128,13 @@ function formatIntegerInput(value: string, signed = false) {
   return `${sign}${formatNumber(Number(digits))}`;
 }
 
-function formatUsd(value: number | null | undefined) {
+function formatYenFromUsd(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) return "個別見積";
-  return `$${new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: value % 1 === 0 ? 0 : 2,
-    minimumFractionDigits: value % 1 === 0 ? 0 : 2,
-  }).format(value)}`;
+  return new Intl.NumberFormat("ja-JP", {
+    currency: "JPY",
+    maximumFractionDigits: 0,
+    style: "currency",
+  }).format(Math.round(value * usdToJpyRate));
 }
 
 function formatBillingDate(value: string | null | undefined) {
@@ -802,9 +804,9 @@ export function AdminPage({ section }: { section: AdminSection }) {
               </div>
               <div>
                 <span>プラン＋選択中アドオン</span>
-                <strong>{formatUsd(billingTotalCost)}</strong>
+                <strong>{formatYenFromUsd(billingTotalCost)}</strong>
                 <p>
-                  APIから取得したプラン価格と選択中アドオン価格の月額換算です。
+                  APIから取得したドル建て価格を円換算した月額目安です。
                 </p>
               </div>
             </div>
@@ -821,11 +823,11 @@ export function AdminPage({ section }: { section: AdminSection }) {
             <div className="billing-metrics">
               <div>
                 <span>プラン基本料</span>
-                <strong>{formatUsd(billingBaseCost)}</strong>
+                <strong>{formatYenFromUsd(billingBaseCost)}</strong>
               </div>
               <div>
                 <span>選択中アドオン</span>
-                <strong>{formatUsd(billingAddonCost)}</strong>
+                <strong>{formatYenFromUsd(billingAddonCost)}</strong>
               </div>
               <div>
                 <span>APIリクエスト</span>
@@ -870,7 +872,7 @@ export function AdminPage({ section }: { section: AdminSection }) {
                       {item.price?.description ?? "Supabase Management API価格情報"}
                       {item.price?.interval ? ` / ${item.price.interval}` : ""}
                     </p>
-                    <strong>{formatUsd(item.estimatedMonthlyUsd)}</strong>
+                    <strong>{formatYenFromUsd(item.estimatedMonthlyUsd)}</strong>
                   </div>
                 ))
               ) : (
@@ -917,7 +919,7 @@ export function AdminPage({ section }: { section: AdminSection }) {
             ) : null}
             <p className="billing-note">
               この画面はSupabase Management APIから取得できる利用情報を表示しています。
-              税金、割引、請求締め後の確定金額はSupabaseの請求画面で確認してください。
+              金額は1ドル={formatNumber(usdToJpyRate)}円で換算しています。税金、割引、請求締め後の確定金額はSupabaseの請求画面で確認してください。
             </p>
           </article>
         </section>
