@@ -86,7 +86,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="sidebar" aria-label="メインナビゲーション">
         <div className="brand-lockup compact">
           <span className="brand-mark brand-logo-box">
-            <img alt="OkiFra" src={okifraSidebarLogo} />
+            <img alt="オキアリ" src={okifraSidebarLogo} />
           </span>
         </div>
         <nav className="nav-list">
