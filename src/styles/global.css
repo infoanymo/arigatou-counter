@@ -1437,11 +1437,48 @@ select:focus {
   gap: 22px;
 }
 
+.billing-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  padding: 12px 14px;
+}
+
+.billing-status span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 900;
+}
+
+.billing-status span::before {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--danger);
+  content: "";
+}
+
+.billing-status.live span::before {
+  background: var(--teal);
+}
+
+.billing-status strong {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
 .billing-hero {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  margin-top: 20px;
 }
 
 .billing-hero > div {
@@ -1479,6 +1516,34 @@ select:focus {
 .billing-list {
   display: grid;
   gap: 10px;
+}
+
+.billing-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.billing-metrics > div {
+  display: grid;
+  min-height: 92px;
+  align-content: space-between;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 14px;
+}
+
+.billing-metrics span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.billing-metrics strong {
+  color: var(--teal-dark);
+  font-size: 1.55rem;
+  line-height: 1.1;
 }
 
 .billing-row {
@@ -1526,6 +1591,28 @@ select:focus {
   border-left: 4px solid var(--teal);
   background: rgba(0, 45, 85, 0.05);
   padding: 12px 14px;
+}
+
+.billing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.billing-warning {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(180, 35, 24, 0.16);
+  border-radius: 8px;
+  background: rgba(180, 35, 24, 0.06);
+  padding: 12px 14px;
+}
+
+.billing-warning p {
+  color: var(--danger);
+  font-size: 0.88rem;
+  font-weight: 800;
+  line-height: 1.6;
 }
 
 .modal-backdrop {
@@ -1825,6 +1912,7 @@ td select {
   .analytics-filter-grid,
   .analytics-summary-grid,
   .billing-hero,
+  .billing-metrics,
   .billing-row,
   .adjustment-summary.four-columns,
   .adjustment-summary,

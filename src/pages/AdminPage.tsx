@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom";
 import {
   Calculator,
   CreditCard,
+  ExternalLink,
   KeyRound,
   RefreshCcw,
   Trash2,
@@ -48,29 +49,68 @@ type AdjustmentWithProfile = ThankYouAdjustment & {
 
 type AdminSection = "account" | "adjustment" | "billing";
 
-const billingItems = [
-  {
-    name: "GitHub Pages",
-    plan: "Free",
-    monthlyCost: "0円",
-    note: "静的サイト公開。公開リポジトリ運用なら無料枠で想定。",
-  },
-  {
-    name: "Supabase",
-    plan: "Free",
-    monthlyCost: "0円",
-    note: "40人規模のログイン、ありがとう、コメント、いいねは無料枠内で想定。",
-  },
-  {
-    name: "Supabase Pro",
-    plan: "実運用推奨",
-    monthlyCost: "約25ドル/月",
-    note: "会社利用で停止リスクやバックアップ余裕を見たい場合の推奨目安。",
-  },
-] as const;
+type BillingPrice = {
+  amount?: number;
+  description?: string;
+  interval?: string;
+  type?: string;
+};
 
-const billingTotalLabel = "0円/月";
-const billingRecommendedLabel = "約25ドル/月";
+type BillingAddon = {
+  type: string;
+  variantId: string;
+  name: string;
+  price: BillingPrice | null;
+  estimatedMonthlyUsd: number;
+};
+
+type BillingUsage = {
+  live: boolean;
+  generatedAt: string;
+  message?: string;
+  missing?: string[];
+  project?: {
+    ref: string;
+    name: string;
+    region: string;
+    status: string;
+    organizationSlug: string;
+  };
+  organization?: {
+    name: string;
+    slug: string;
+    plan: "free" | "pro" | "team" | "enterprise" | "platform";
+  } | null;
+  billingPageUrl?: string;
+  usagePageUrl?: string;
+  selectedAddons?: BillingAddon[];
+  selectedAddonEstimatedMonthlyUsd?: number;
+  apiRequestCount?: number | null;
+  apiCounts?: {
+    timestamp: string;
+    total_auth_requests: number;
+    total_realtime_requests: number;
+    total_rest_requests: number;
+    total_storage_requests: number;
+  }[];
+  warnings?: string[];
+};
+
+const planLabels = {
+  free: "Free",
+  pro: "Pro",
+  team: "Team",
+  enterprise: "Enterprise",
+  platform: "Platform",
+} as const;
+
+const planBaseMonthlyUsd: Record<keyof typeof planLabels, number | null> = {
+  free: 0,
+  pro: 25,
+  team: 599,
+  enterprise: null,
+  platform: null,
+};
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -85,6 +125,48 @@ function formatIntegerInput(value: string, signed = false) {
 
   if (!digits) return sign;
   return `${sign}${formatNumber(Number(digits))}`;
+}
+
+function formatUsd(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "個別見積";
+  return `$${new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: value % 1 === 0 ? 0 : 2,
+    minimumFractionDigits: value % 1 === 0 ? 0 : 2,
+  }).format(value)}`;
+}
+
+function formatBillingDate(value: string | null | undefined) {
+  if (!value) return "未取得";
+  return new Intl.DateTimeFormat("ja-JP", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function billingPlanCost(usage: BillingUsage | null) {
+  if (!usage?.organization?.plan) return null;
+  return planBaseMonthlyUsd[usage.organization.plan] ?? null;
+}
+
+function billingApiBreakdown(usage: BillingUsage | null) {
+  const latest = usage?.apiCounts?.at(-1);
+  if (!latest) {
+    return {
+      auth: 0,
+      realtime: 0,
+      rest: 0,
+      storage: 0,
+    };
+  }
+
+  return {
+    auth: latest.total_auth_requests,
+    realtime: latest.total_realtime_requests,
+    rest: latest.total_rest_requests,
+    storage: latest.total_storage_requests,
+  };
 }
 
 function defaultPeriodForm(): PeriodForm {
@@ -126,6 +208,22 @@ async function invokeAdmin<T>(
   return data as T;
 }
 
+async function invokeBilling(): Promise<BillingUsage> {
+  const client = getSupabase();
+  const { data, error } = await client.functions.invoke<BillingUsage>(
+    "billing-usage",
+    {
+      body: { action: "summary" },
+    },
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data as BillingUsage;
+}
+
 export function AdminPage({ section }: { section: AdminSection }) {
   const { user, refreshAuth } = useAuth();
   const [periodForm, setPeriodForm] = useState<PeriodForm>(defaultPeriodForm);
@@ -143,6 +241,8 @@ export function AdminPage({ section }: { section: AdminSection }) {
   const [clearingThankYous, setClearingThankYous] = useState(false);
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [billingUsage, setBillingUsage] = useState<BillingUsage | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
 
   const adjustmentTotal = useMemo(
     () => adjustments.reduce((sum, item) => sum + item.delta, 0),
@@ -237,9 +337,33 @@ export function AdminPage({ section }: { section: AdminSection }) {
     }
   }, [loadAdjustmentSummary]);
 
+  const loadBilling = useCallback(async () => {
+    setBillingLoading(true);
+    try {
+      setBillingUsage(await invokeBilling());
+    } catch (error) {
+      setBillingUsage({
+        live: false,
+        generatedAt: new Date().toISOString(),
+        message:
+          error instanceof Error
+            ? error.message
+            : "利用料情報を取得できませんでした。",
+      });
+    } finally {
+      setBillingLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
+    if (section === "billing") {
+      setLoading(false);
+      void loadBilling();
+      return;
+    }
+
     void loadAdmin();
-  }, [loadAdmin]);
+  }, [loadAdmin, loadBilling, section]);
 
   async function handleCreateAccount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -361,6 +485,16 @@ export function AdminPage({ section }: { section: AdminSection }) {
       : section === "adjustment"
         ? "ありがとう件数の補正と全削除を管理します。"
         : "このアプリの運営にかかる利用料の目安を確認します。";
+  const billingBreakdown = billingApiBreakdown(billingUsage);
+  const billingBaseCost = billingPlanCost(billingUsage);
+  const billingAddonCost = billingUsage?.selectedAddonEstimatedMonthlyUsd ?? null;
+  const billingTotalCost =
+    typeof billingBaseCost === "number" && typeof billingAddonCost === "number"
+      ? billingBaseCost + billingAddonCost
+      : null;
+  const billingPlanLabel = billingUsage?.organization?.plan
+    ? planLabels[billingUsage.organization.plan]
+    : "未取得";
 
   return (
     <div className="admin-page">
@@ -370,9 +504,15 @@ export function AdminPage({ section }: { section: AdminSection }) {
           <h1>{sectionTitle}</h1>
           <p>{sectionDescription}</p>
         </div>
-        <button className="button button-secondary" onClick={() => void loadAdmin()}>
+        <button
+          className="button button-secondary"
+          disabled={section === "billing" ? billingLoading : loading}
+          onClick={() =>
+            section === "billing" ? void loadBilling() : void loadAdmin()
+          }
+        >
           <RefreshCcw aria-hidden="true" />
-          更新
+          {section === "billing" && billingLoading ? "取得中..." : "更新"}
         </button>
       </header>
 
@@ -641,33 +781,143 @@ export function AdminPage({ section }: { section: AdminSection }) {
                 <h2>利用料</h2>
               </div>
             </div>
+            <div
+              className={`billing-status ${billingUsage?.live ? "live" : "offline"}`}
+            >
+              <span>{billingUsage?.live ? "ライブ取得中" : "Management API未接続"}</span>
+              <strong>
+                最終取得:{" "}
+                {billingLoading ? "取得中..." : formatBillingDate(billingUsage?.generatedAt)}
+              </strong>
+            </div>
             <div className="billing-hero">
               <div>
-                <span>現在の想定利用料</span>
-                <strong>{billingTotalLabel}</strong>
-                <p>GitHub PagesとSupabase Freeで運営する場合の目安です。</p>
+                <span>現在のSupabaseプラン</span>
+                <strong>{billingPlanLabel}</strong>
+                <p>
+                  {billingUsage?.organization
+                    ? `${billingUsage.organization.name} の契約プランです。`
+                    : "Organization情報はまだ取得できていません。"}
+                </p>
               </div>
               <div>
-                <span>実運用おすすめ</span>
-                <strong>{billingRecommendedLabel}</strong>
-                <p>Supabase Proへ上げる場合の月額目安です。</p>
+                <span>プラン＋選択中アドオン</span>
+                <strong>{formatUsd(billingTotalCost)}</strong>
+                <p>
+                  APIから取得したプラン価格と選択中アドオン価格の月額換算です。
+                </p>
               </div>
             </div>
-            <div className="billing-list">
-              {billingItems.map((item) => (
-                <div className="billing-row" key={item.name}>
-                  <div>
-                    <strong>{item.name}</strong>
-                    <span>{item.plan}</span>
-                  </div>
-                  <p>{item.note}</p>
-                  <strong>{item.monthlyCost}</strong>
-                </div>
-              ))}
+
+            {billingUsage?.message ? (
+              <p className="billing-note">
+                {billingUsage.message}
+                {billingUsage.missing?.length
+                  ? ` 必要な設定: ${billingUsage.missing.join(", ")}`
+                  : ""}
+              </p>
+            ) : null}
+
+            <div className="billing-metrics">
+              <div>
+                <span>プラン基本料</span>
+                <strong>{formatUsd(billingBaseCost)}</strong>
+              </div>
+              <div>
+                <span>選択中アドオン</span>
+                <strong>{formatUsd(billingAddonCost)}</strong>
+              </div>
+              <div>
+                <span>APIリクエスト</span>
+                <strong>
+                  {typeof billingUsage?.apiRequestCount === "number"
+                    ? formatNumber(billingUsage.apiRequestCount)
+                    : "未取得"}
+                </strong>
+              </div>
             </div>
+
+            <div className="billing-list">
+              <div className="billing-row">
+                <div>
+                  <strong>GitHub Pages</strong>
+                  <span>Static hosting</span>
+                </div>
+                <p>静的サイト公開。GitHub Pages側の追加利用料はこのアプリでは発生しません。</p>
+                <strong>0円</strong>
+              </div>
+              <div className="billing-row">
+                <div>
+                  <strong>API内訳</strong>
+                  <span>最新の1日集計</span>
+                </div>
+                <p>
+                  Auth {formatNumber(billingBreakdown.auth)} / REST{" "}
+                  {formatNumber(billingBreakdown.rest)} / Realtime{" "}
+                  {formatNumber(billingBreakdown.realtime)} / Storage{" "}
+                  {formatNumber(billingBreakdown.storage)}
+                </p>
+                <strong>使用量</strong>
+              </div>
+              {billingUsage?.selectedAddons?.length ? (
+                billingUsage.selectedAddons.map((item) => (
+                  <div className="billing-row" key={`${item.type}-${item.variantId}`}>
+                    <div>
+                      <strong>{item.name}</strong>
+                      <span>{item.type}</span>
+                    </div>
+                    <p>
+                      {item.price?.description ?? "Supabase Management API価格情報"}
+                      {item.price?.interval ? ` / ${item.price.interval}` : ""}
+                    </p>
+                    <strong>{formatUsd(item.estimatedMonthlyUsd)}</strong>
+                  </div>
+                ))
+              ) : (
+                <div className="billing-row">
+                  <div>
+                    <strong>選択中アドオン</strong>
+                    <span>Billing add-ons</span>
+                  </div>
+                  <p>選択中の有料アドオンは取得されていません。</p>
+                  <strong>0円</strong>
+                </div>
+              )}
+            </div>
+            <div className="billing-actions">
+              {billingUsage?.billingPageUrl ? (
+                <a
+                  className="button button-primary"
+                  href={billingUsage.billingPageUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <ExternalLink aria-hidden="true" />
+                  Supabase請求画面
+                </a>
+              ) : null}
+              {billingUsage?.usagePageUrl ? (
+                <a
+                  className="button button-secondary"
+                  href={billingUsage.usagePageUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <ExternalLink aria-hidden="true" />
+                  使用量画面
+                </a>
+              ) : null}
+            </div>
+            {billingUsage?.warnings?.length ? (
+              <div className="billing-warning">
+                {billingUsage.warnings.map((warning) => (
+                  <p key={warning}>{warning}</p>
+                ))}
+              </div>
+            ) : null}
             <p className="billing-note">
-              実際の請求額はSupabaseやGitHubの契約プラン、通信量、保存容量で変わります。
-              この画面は運営目安の表示で、請求管理画面とは自動連動していません。
+              この画面はSupabase Management APIから取得できる利用情報を表示しています。
+              税金、割引、請求締め後の確定金額はSupabaseの請求画面で確認してください。
             </p>
           </article>
         </section>
