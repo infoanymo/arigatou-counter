@@ -94,26 +94,28 @@ function AppShell({ children }: { children: React.ReactNode }) {
             <BarChart3 aria-hidden="true" />
             ダッシュボード
           </NavLink>
-          <details
-            className="nav-group"
-            open={location.pathname.startsWith("/analytics")}
-          >
-            <summary>
-              <BarChart3 aria-hidden="true" />
-              分析
-              <ChevronDown className="nav-chevron" aria-hidden="true" />
-            </summary>
-            <div className="nav-sublist">
-              <NavLink to="/analytics/period">
-                <CalendarDays aria-hidden="true" />
-                期間
-              </NavLink>
-              <NavLink to="/analytics/person">
-                <UserRound aria-hidden="true" />
-                人物
-              </NavLink>
-            </div>
-          </details>
+          {isAdmin ? (
+            <details
+              className="nav-group"
+              open={location.pathname.startsWith("/analytics")}
+            >
+              <summary>
+                <BarChart3 aria-hidden="true" />
+                分析
+                <ChevronDown className="nav-chevron" aria-hidden="true" />
+              </summary>
+              <div className="nav-sublist">
+                <NavLink to="/analytics/period">
+                  <CalendarDays aria-hidden="true" />
+                  期間
+                </NavLink>
+                <NavLink to="/analytics/person">
+                  <UserRound aria-hidden="true" />
+                  人物
+                </NavLink>
+              </div>
+            </details>
+          ) : null}
           <details
             className="nav-group"
             open={location.pathname.startsWith("/settings")}
@@ -202,11 +204,22 @@ function RequireAuth({
 }) {
   const { user, profile, loading, isAdmin } = useAuth();
   const location = useLocation();
+  const passwordSetupCallback = isPasswordSetupCallback();
 
   if (!isSupabaseConfigured) return <SetupRequired />;
   if (loading) return <LoadingScreen />;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) {
+    return (
+      <Navigate
+        to={passwordSetupCallback ? "/login?mode=set-password" : "/login"}
+        replace
+      />
+    );
+  }
   if (profile?.status === "disabled") return <DisabledAccount />;
+  if (passwordSetupCallback && location.pathname !== "/login") {
+    return <Navigate to="/login?mode=set-password" replace />;
+  }
   if (!isProfileComplete(profile) && location.pathname !== "/settings/profile") {
     return <Navigate to="/settings/profile" replace />;
   }
@@ -215,13 +228,20 @@ function RequireAuth({
   return <AppShell>{children}</AppShell>;
 }
 
-function FallbackRoute() {
+function isPasswordSetupCallback() {
   const href = window.location.href;
-  if (
+  return (
+    href.includes("mode=set-password") ||
     href.includes("type=invite") ||
-    href.includes("type=recovery") ||
-    href.includes("mode=set-password")
-  ) {
+    href.includes("type=recovery")
+  );
+}
+
+function FallbackRoute() {
+  const { loading } = useAuth();
+
+  if (isPasswordSetupCallback()) {
+    if (loading) return <LoadingScreen />;
     return <Navigate to="/login?mode=set-password" replace />;
   }
 
@@ -243,7 +263,7 @@ export default function App() {
       <Route
         path="/analytics/period"
         element={
-          <RequireAuth>
+          <RequireAuth adminOnly>
             <AnalyticsPage section="period" />
           </RequireAuth>
         }
@@ -251,7 +271,7 @@ export default function App() {
       <Route
         path="/analytics/person"
         element={
-          <RequireAuth>
+          <RequireAuth adminOnly>
             <AnalyticsPage section="person" />
           </RequireAuth>
         }

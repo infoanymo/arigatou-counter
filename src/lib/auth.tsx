@@ -30,6 +30,67 @@ function fallbackName(email?: string | null) {
   return email.split("@")[0] || email;
 }
 
+function collectNestedHashAuthParams() {
+  const params = new URLSearchParams();
+  const hash = window.location.hash.startsWith("#")
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+
+  function appendAll(value: string) {
+    const nextParams = new URLSearchParams(value);
+    nextParams.forEach((paramValue, key) => {
+      params.set(key, paramValue);
+    });
+  }
+
+  if (!hash) return params;
+
+  appendAll(hash);
+
+  const routeQueryStart = hash.indexOf("?");
+  if (routeQueryStart >= 0) {
+    appendAll(hash.slice(routeQueryStart + 1).split("#")[0]);
+  }
+
+  const nestedHashStart = hash.indexOf("#");
+  if (nestedHashStart >= 0) {
+    appendAll(hash.slice(nestedHashStart + 1));
+  }
+
+  return params;
+}
+
+function cleanPasswordSetupUrl() {
+  window.history.replaceState(
+    null,
+    "",
+    `${window.location.origin}${window.location.pathname}#/login?mode=set-password`,
+  );
+}
+
+async function recoverNestedHashSession() {
+  if (!supabase) return;
+
+  const params = collectNestedHashAuthParams();
+  const accessToken = params.get("access_token");
+  const refreshToken = params.get("refresh_token");
+  const code = params.get("code");
+
+  if (accessToken && refreshToken) {
+    const { error } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+    if (!error) cleanPasswordSetupUrl();
+    return;
+  }
+
+  if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (!error) cleanPasswordSetupUrl();
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -82,6 +143,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     setLoading(true);
+    await recoverNestedHashSession();
+
     const {
       data: { session },
     } = await supabase.auth.getSession();

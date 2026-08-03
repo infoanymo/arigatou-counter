@@ -7,10 +7,32 @@ import { isSupabaseConfigured } from "../lib/supabase";
 
 function isPasswordSetupMode(search: string) {
   const params = new URLSearchParams(search);
+  const pageParams = new URLSearchParams(window.location.search);
+
   return (
     params.get("mode") === "set-password" ||
+    pageParams.get("mode") === "set-password" ||
     window.location.href.includes("type=invite") ||
     window.location.href.includes("type=recovery")
+  );
+}
+
+function PasswordSetupLoading() {
+  return (
+    <main className="center-screen">
+      <div className="loader-panel">
+        <div className="pulse-mark" />
+        <p>招待リンクを確認しています</p>
+      </div>
+    </main>
+  );
+}
+
+function clearPasswordSetupUrl() {
+  window.history.replaceState(
+    null,
+    "",
+    `${window.location.origin}${window.location.pathname}#/`,
   );
 }
 
@@ -28,6 +50,7 @@ export function LoginPage() {
     () => isPasswordSetupMode(location.search),
     [location.search],
   );
+  const passwordSetupUnavailable = passwordSetupMode && !loading && !user;
 
   if (!isSupabaseConfigured) {
     return (
@@ -53,6 +76,10 @@ export function LoginPage() {
 
   if (!loading && user && profile?.status !== "disabled" && !passwordSetupMode) {
     return <Navigate to="/" replace />;
+  }
+
+  if (passwordSetupMode && loading) {
+    return <PasswordSetupLoading />;
   }
 
   async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
@@ -82,6 +109,7 @@ export function LoginPage() {
     try {
       await setPassword(newPassword);
       await refreshAuth();
+      clearPasswordSetupUrl();
       navigate("/", { replace: true });
     } catch (error) {
       setMessage(
@@ -129,6 +157,12 @@ export function LoginPage() {
           </>
         ) : (
           <>
+            {passwordSetupUnavailable ? (
+              <div className="login-copy">
+                <p>招待リンクを確認できませんでした</p>
+                <h2>ログイン</h2>
+              </div>
+            ) : null}
             <form className="login-form" onSubmit={handleLogin}>
               <label className="login-field">
                 <span>ID</span>
@@ -152,6 +186,11 @@ export function LoginPage() {
                 />
               </label>
               {message ? <p className="form-message">{message}</p> : null}
+              {!message && passwordSetupUnavailable ? (
+                <p className="form-message">
+                  招待メールのリンクをもう一度開いてください。
+                </p>
+              ) : null}
               <button className="button button-primary" disabled={submitting}>
                 {submitting ? "ログイン中..." : "ログイン"}
               </button>

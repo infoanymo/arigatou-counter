@@ -65,6 +65,23 @@ function siteUrl(req: Request) {
   return (origin || "").replace(/\/$/, "");
 }
 
+function passwordSetupRedirectUrl(req: Request) {
+  const base = siteUrl(req);
+  if (!base) return "";
+
+  try {
+    const url = new URL(base);
+    if (url.pathname.endsWith("/index.html")) {
+      url.pathname = url.pathname.slice(0, -"/index.html".length) || "/";
+    }
+    url.search = "";
+    url.hash = "";
+    return `${url.toString().replace(/\/$/, "")}/#/login?mode=set-password`;
+  } catch {
+    return `${base.replace(/[?#].*$/, "").replace(/\/$/, "")}/#/login?mode=set-password`;
+  }
+}
+
 function getAdminKey() {
   const legacyServiceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (legacyServiceRole) return legacyServiceRole;
@@ -238,12 +255,10 @@ Deno.serve(async (req) => {
       return json({ error: "Valid email is required." }, 400);
     }
 
-    const redirectBase = siteUrl(req);
+    const redirectTo = passwordSetupRedirectUrl(req);
     const options = {
       ...(displayName ? { data: { display_name: displayName } } : {}),
-      ...(redirectBase
-        ? { redirectTo: `${redirectBase}/#/login?mode=set-password` }
-        : {}),
+      ...(redirectTo ? { redirectTo } : {}),
     };
 
     const { data, error } = await admin.auth.admin.inviteUserByEmail(
