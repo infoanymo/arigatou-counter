@@ -231,7 +231,7 @@ Deno.serve(async (req) => {
 
   if (action === "invite") {
     const email = cleanEmail(body.email);
-    const displayName = cleanText(body.displayName) || email.split("@")[0];
+    const displayName = cleanText(body.displayName);
     const role = cleanRole(body.role);
 
     if (!email || !email.includes("@")) {
@@ -240,7 +240,7 @@ Deno.serve(async (req) => {
 
     const redirectBase = siteUrl(req);
     const options = {
-      data: { display_name: displayName },
+      ...(displayName ? { data: { display_name: displayName } } : {}),
       ...(redirectBase
         ? { redirectTo: `${redirectBase}/#/login?mode=set-password` }
         : {}),
@@ -271,7 +271,7 @@ Deno.serve(async (req) => {
       {
         id: data.user.id,
         email,
-        display_name: displayName,
+        display_name: displayName || null,
         company_name: null,
         avatar_url: null,
         avatar_scale: 100,

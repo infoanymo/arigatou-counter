@@ -4,7 +4,7 @@ import {
   Calculator,
   CreditCard,
   ExternalLink,
-  KeyRound,
+  MailPlus,
   RefreshCcw,
   Trash2,
   TriangleAlert,
@@ -220,7 +220,6 @@ export function AdminPage({ section }: { section: AdminSection }) {
   const [adjustments, setAdjustments] = useState<AdjustmentWithProfile[]>([]);
   const [eventCount, setEventCount] = useState(0);
   const [accountEmail, setAccountEmail] = useState("");
-  const [accountPassword, setAccountPassword] = useState("");
   const [accountRole, setAccountRole] = useState<"member" | "admin">("member");
   const [adjustmentDelta, setAdjustmentDelta] = useState("");
   const [adjustmentReason, setAdjustmentReason] = useState("");
@@ -361,19 +360,17 @@ export function AdminPage({ section }: { section: AdminSection }) {
 
     try {
       await invokeAdmin({
-        action: "create-user",
+        action: "invite",
         email: accountEmail.trim(),
-        password: accountPassword,
         role: accountRole,
       });
       setAccountEmail("");
-      setAccountPassword("");
       setAccountRole("member");
-      setMessage("アカウントを発行しました。");
+      setMessage("招待メールを送信しました。");
       await loadAdmin();
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : "アカウントを発行できませんでした。",
+        error instanceof Error ? error.message : "招待メールを送信できませんでした。",
       );
     } finally {
       setCreatingAccount(false);
@@ -470,7 +467,7 @@ export function AdminPage({ section }: { section: AdminSection }) {
     section === "account" ? "アカウント" : section === "adjustment" ? "件数調整" : "料金";
   const sectionDescription =
     section === "account"
-      ? "アカウント発行とユーザー権限を管理します。"
+      ? "招待メールの送信とユーザー権限を管理します。"
       : section === "adjustment"
         ? "ありがとう件数の補正と全削除を管理します。"
         : "このアプリの運営にかかる利用料の目安を確認します。";
@@ -525,7 +522,7 @@ export function AdminPage({ section }: { section: AdminSection }) {
                 <UserRound aria-hidden="true" />
                 <div>
                   <p className="eyebrow">Account</p>
-                  <h2>アカウント発行</h2>
+                  <h2>招待メール送信</h2>
                 </div>
               </div>
               <form className="form-stack" onSubmit={handleCreateAccount}>
@@ -541,20 +538,6 @@ export function AdminPage({ section }: { section: AdminSection }) {
                   />
                 </label>
                 <label>
-                  <span>パスワード</span>
-                  <div className="input-shell">
-                    <KeyRound aria-hidden="true" />
-                    <input
-                      autoComplete="new-password"
-                      minLength={6}
-                      onChange={(event) => setAccountPassword(event.target.value)}
-                      required
-                      type="password"
-                      value={accountPassword}
-                    />
-                  </div>
-                </label>
-                <label>
                   <span>権限</span>
                   <select
                     onChange={(event) =>
@@ -567,8 +550,8 @@ export function AdminPage({ section }: { section: AdminSection }) {
                   </select>
                 </label>
                 <button className="button button-primary" disabled={creatingAccount}>
-                  <UserRound aria-hidden="true" />
-                  {creatingAccount ? "発行中..." : "アカウントを発行"}
+                  <MailPlus aria-hidden="true" />
+                  {creatingAccount ? "送信中..." : "招待メールを送信"}
                 </button>
               </form>
             </article>
