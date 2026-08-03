@@ -191,10 +191,33 @@ async function invokeAdmin<T>(
   });
 
   if (error) {
-    throw new Error(error.message);
+    throw new Error(await functionErrorMessage(error));
   }
 
   return data as T;
+}
+
+async function functionErrorMessage(error: unknown) {
+  const fallback =
+    error instanceof Error ? error.message : "処理を完了できませんでした。";
+  const context = (error as { context?: unknown })?.context;
+
+  if (context instanceof Response) {
+    const text = await context.text().catch(() => "");
+    if (!text) return fallback;
+
+    try {
+      const parsed = JSON.parse(text) as { error?: unknown; message?: unknown };
+      const message = parsed.error ?? parsed.message;
+      return typeof message === "string" && message.trim()
+        ? message
+        : fallback;
+    } catch {
+      return text.trim() || fallback;
+    }
+  }
+
+  return fallback;
 }
 
 async function invokeBilling(): Promise<BillingUsage> {
