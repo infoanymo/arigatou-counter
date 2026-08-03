@@ -7,6 +7,7 @@ import {
   CreditCard,
   HeartHandshake,
   LogOut,
+  MessageCircle,
   Settings,
   SlidersHorizontal,
   Target,
@@ -157,6 +158,10 @@ function AppShell({ children }: { children: React.ReactNode }) {
                   <Calculator aria-hidden="true" />
                   件数調整
                 </NavLink>
+                <NavLink to="/admin/chatwork">
+                  <MessageCircle aria-hidden="true" />
+                  チャットワーク連携
+                </NavLink>
                 <NavLink to="/admin/billing">
                   <CreditCard aria-hidden="true" />
                   料金
@@ -293,6 +298,14 @@ export default function App() {
         element={
           <RequireAuth adminOnly>
             <AdminPage section="adjustment" />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin/chatwork"
+        element={
+          <RequireAuth adminOnly>
+            <AdminPage section="chatwork" />
           </RequireAuth>
         }
       />

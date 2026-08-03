@@ -204,6 +204,88 @@ export type Database = {
           },
         ];
       };
+      chatwork_settings: {
+        Row: {
+          id: number;
+          api_token: string | null;
+          room_id: string | null;
+          enabled: boolean;
+          updated_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: number;
+          api_token?: string | null;
+          room_id?: string | null;
+          enabled?: boolean;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          api_token?: string | null;
+          room_id?: string | null;
+          enabled?: boolean;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "chatwork_settings_updated_by_fkey";
+            columns: ["updated_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      chatwork_monthly_notifications: {
+        Row: {
+          id: string;
+          target_month: string;
+          status: "sent" | "failed";
+          cumulative_count: number | null;
+          monthly_count: number | null;
+          message_body: string;
+          chatwork_message_id: string | null;
+          response: Json | null;
+          error_message: string | null;
+          sent_at: string | null;
+          triggered_by: "admin" | "cron" | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          target_month: string;
+          status: "sent" | "failed";
+          cumulative_count?: number | null;
+          monthly_count?: number | null;
+          message_body: string;
+          chatwork_message_id?: string | null;
+          response?: Json | null;
+          error_message?: string | null;
+          sent_at?: string | null;
+          triggered_by?: "admin" | "cron" | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          target_month?: string;
+          status?: "sent" | "failed";
+          cumulative_count?: number | null;
+          monthly_count?: number | null;
+          message_body?: string;
+          chatwork_message_id?: string | null;
+          response?: Json | null;
+          error_message?: string | null;
+          sent_at?: string | null;
+          triggered_by?: "admin" | "cron" | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

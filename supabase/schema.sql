@@ -76,6 +76,32 @@ create table if not exists public.thank_you_adjustments (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.chatwork_settings (
+  id smallint primary key default 1 check (id = 1),
+  api_token text,
+  room_id text,
+  enabled boolean not null default false,
+  updated_by uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.chatwork_monthly_notifications (
+  id uuid primary key default gen_random_uuid(),
+  target_month date not null unique,
+  status text not null check (status in ('sent', 'failed')),
+  cumulative_count integer check (cumulative_count >= 0),
+  monthly_count integer check (monthly_count >= 0),
+  message_body text not null,
+  chatwork_message_id text,
+  response jsonb,
+  error_message text,
+  sent_at timestamptz,
+  triggered_by text check (triggered_by in ('admin', 'cron')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create index if not exists profiles_status_idx on public.profiles (status);
 create index if not exists periods_active_idx on public.periods (is_active, starts_on desc);
 create index if not exists thank_you_events_period_created_idx
@@ -94,6 +120,8 @@ create index if not exists thank_you_adjustments_period_created_idx
   on public.thank_you_adjustments (period_id, created_at desc);
 create index if not exists thank_you_adjustments_admin_user_idx
   on public.thank_you_adjustments (admin_user_id);
+create index if not exists chatwork_monthly_notifications_created_idx
+  on public.chatwork_monthly_notifications (created_at desc);
 
 create or replace function app_private.touch_updated_at()
 returns trigger
@@ -180,6 +208,16 @@ create trigger periods_touch_updated_at
 before update on public.periods
 for each row execute function app_private.touch_updated_at();
 
+drop trigger if exists chatwork_settings_touch_updated_at on public.chatwork_settings;
+create trigger chatwork_settings_touch_updated_at
+before update on public.chatwork_settings
+for each row execute function app_private.touch_updated_at();
+
+drop trigger if exists chatwork_monthly_notifications_touch_updated_at on public.chatwork_monthly_notifications;
+create trigger chatwork_monthly_notifications_touch_updated_at
+before update on public.chatwork_monthly_notifications
+for each row execute function app_private.touch_updated_at();
+
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
 after insert or update of email, raw_user_meta_data on auth.users
@@ -205,6 +243,8 @@ alter table public.thank_you_events enable row level security;
 alter table public.thank_you_likes enable row level security;
 alter table public.thank_you_comments enable row level security;
 alter table public.thank_you_adjustments enable row level security;
+alter table public.chatwork_settings enable row level security;
+alter table public.chatwork_monthly_notifications enable row level security;
 
 drop policy if exists "profiles_select_for_active_users_or_self" on public.profiles;
 create policy "profiles_select_for_active_users_or_self"
@@ -339,6 +379,8 @@ grant select, insert on public.thank_you_events to authenticated;
 grant select, insert, delete on public.thank_you_likes to authenticated;
 grant select, insert on public.thank_you_comments to authenticated;
 grant select, insert on public.thank_you_adjustments to authenticated;
+revoke all on public.chatwork_settings from anon, authenticated;
+revoke all on public.chatwork_monthly_notifications from anon, authenticated;
 
 do $$
 begin

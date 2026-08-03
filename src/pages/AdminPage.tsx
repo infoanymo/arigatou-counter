@@ -4,8 +4,11 @@ import {
   Calculator,
   CreditCard,
   ExternalLink,
+  KeyRound,
   MailPlus,
+  MessageCircle,
   RefreshCcw,
+  Send,
   Trash2,
   TriangleAlert,
   UserRound,
@@ -47,7 +50,7 @@ type AdjustmentWithProfile = ThankYouAdjustment & {
   profiles: Pick<Profile, "display_name" | "email" | "avatar_url" | "avatar_scale"> | null;
 };
 
-type AdminSection = "account" | "adjustment" | "billing";
+type AdminSection = "account" | "adjustment" | "billing" | "chatwork";
 
 type BillingPrice = {
   amount?: number;
@@ -96,6 +99,39 @@ type BillingUsage = {
   warnings?: string[];
 };
 
+type ChatworkSettings = {
+  enabled: boolean;
+  roomId: string;
+  tokenConfigured: boolean;
+  updatedAt: string | null;
+};
+
+type ChatworkPreview = {
+  targetMonth: string;
+  targetMonthLabel: string;
+  startIso: string;
+  endIso: string;
+  cumulativeTotal: number;
+  monthlyTotal: number;
+  message: string;
+};
+
+type ChatworkNotification = {
+  target_month: string;
+  status: "sent" | "failed";
+  cumulative_count: number | null;
+  monthly_count: number | null;
+  error_message: string | null;
+  sent_at: string | null;
+  triggered_by: "admin" | "cron" | null;
+};
+
+type ChatworkSettingsResponse = {
+  settings: ChatworkSettings;
+  preview: ChatworkPreview;
+  lastNotification: ChatworkNotification | null;
+};
+
 const planLabels = {
   free: "Free",
   pro: "Pro",
@@ -137,6 +173,14 @@ function formatBillingDate(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatMonthDate(value: string | null | undefined) {
+  if (!value) return "未送信";
+  return new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "long",
+  }).format(new Date(`${value}T00:00:00+09:00`));
 }
 
 function billingApiBreakdown(usage: BillingUsage | null) {
@@ -236,6 +280,22 @@ async function invokeBilling(): Promise<BillingUsage> {
   return data as BillingUsage;
 }
 
+async function invokeChatwork<T>(body: Record<string, unknown>): Promise<T> {
+  const client = getSupabase();
+  const { data, error } = await client.functions.invoke<T>(
+    "chatwork-notification",
+    {
+      body,
+    },
+  );
+
+  if (error) {
+    throw new Error(await functionErrorMessage(error));
+  }
+
+  return data as T;
+}
+
 export function AdminPage({ section }: { section: AdminSection }) {
   const { user, refreshAuth } = useAuth();
   const [periodForm, setPeriodForm] = useState<PeriodForm>(defaultPeriodForm);
@@ -254,6 +314,19 @@ export function AdminPage({ section }: { section: AdminSection }) {
   const [message, setMessage] = useState<string | null>(null);
   const [billingUsage, setBillingUsage] = useState<BillingUsage | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
+  const [chatworkSettings, setChatworkSettings] =
+    useState<ChatworkSettings | null>(null);
+  const [chatworkPreview, setChatworkPreview] =
+    useState<ChatworkPreview | null>(null);
+  const [chatworkLastNotification, setChatworkLastNotification] =
+    useState<ChatworkNotification | null>(null);
+  const [chatworkApiToken, setChatworkApiToken] = useState("");
+  const [chatworkRoomId, setChatworkRoomId] = useState("");
+  const [chatworkEnabled, setChatworkEnabled] = useState(false);
+  const [savingChatwork, setSavingChatwork] = useState(false);
+  const [sendingChatwork, setSendingChatwork] = useState<"test" | "monthly" | null>(
+    null,
+  );
 
   const adjustmentTotal = useMemo(
     () => adjustments.reduce((sum, item) => sum + item.delta, 0),
@@ -366,6 +439,32 @@ export function AdminPage({ section }: { section: AdminSection }) {
     }
   }, []);
 
+  const loadChatwork = useCallback(async () => {
+    setLoading(true);
+    setMessage(null);
+
+    try {
+      const response = await invokeChatwork<ChatworkSettingsResponse>({
+        action: "get-settings",
+      });
+
+      setChatworkSettings(response.settings);
+      setChatworkPreview(response.preview);
+      setChatworkLastNotification(response.lastNotification);
+      setChatworkRoomId(response.settings.roomId);
+      setChatworkEnabled(response.settings.enabled);
+      setChatworkApiToken("");
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "チャットワーク連携を読み込めませんでした。",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (section === "billing") {
       setLoading(false);
@@ -373,8 +472,13 @@ export function AdminPage({ section }: { section: AdminSection }) {
       return;
     }
 
+    if (section === "chatwork") {
+      void loadChatwork();
+      return;
+    }
+
     void loadAdmin();
-  }, [loadAdmin, loadBilling, section]);
+  }, [loadAdmin, loadBilling, loadChatwork, section]);
 
   async function handleCreateAccount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -486,14 +590,81 @@ export function AdminPage({ section }: { section: AdminSection }) {
     }
   }
 
+  async function handleChatworkSave(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSavingChatwork(true);
+    setMessage(null);
+
+    try {
+      await invokeChatwork({
+        action: "save-settings",
+        apiToken: chatworkApiToken.trim(),
+        roomId: chatworkRoomId.trim(),
+        enabled: chatworkEnabled,
+      });
+      setMessage("チャットワーク連携を保存しました。");
+      await loadChatwork();
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "チャットワーク連携を保存できませんでした。",
+      );
+    } finally {
+      setSavingChatwork(false);
+    }
+  }
+
+  async function sendChatwork(action: "send-test" | "send-monthly") {
+    setSendingChatwork(action === "send-test" ? "test" : "monthly");
+    setMessage(null);
+
+    try {
+      const response = await invokeChatwork<{
+        skipped?: boolean;
+        reason?: string;
+      }>({
+        action,
+      });
+
+      if (response.skipped && response.reason === "already_sent") {
+        setMessage("この月の通知はすでに送信済みです。");
+      } else {
+        setMessage(
+          action === "send-test"
+            ? "チャットワークへテスト送信しました。"
+            : "チャットワークへ月次通知を送信しました。",
+        );
+      }
+
+      await loadChatwork();
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "チャットワークへ送信できませんでした。",
+      );
+    } finally {
+      setSendingChatwork(null);
+    }
+  }
+
   const sectionTitle =
-    section === "account" ? "アカウント" : section === "adjustment" ? "件数調整" : "料金";
+    section === "account"
+      ? "アカウント"
+      : section === "adjustment"
+        ? "件数調整"
+        : section === "chatwork"
+          ? "チャットワーク連携"
+          : "料金";
   const sectionDescription =
     section === "account"
       ? "招待メールの送信とユーザー権限を管理します。"
       : section === "adjustment"
         ? "ありがとう件数の補正と全削除を管理します。"
-        : "このアプリの運営にかかる利用料の目安を確認します。";
+        : section === "chatwork"
+          ? "月初3日にありがとう集計をチャットワークへ送信します。"
+          : "このアプリの運営にかかる利用料の目安を確認します。";
   const billingBreakdown = billingApiBreakdown(billingUsage);
   const billingAddedCost = billingUsage?.selectedAddonEstimatedMonthlyUsd ?? null;
   const billingPlanLabel = billingUsage?.organization?.plan
@@ -512,7 +683,11 @@ export function AdminPage({ section }: { section: AdminSection }) {
           className="button button-secondary"
           disabled={section === "billing" ? billingLoading : loading}
           onClick={() =>
-            section === "billing" ? void loadBilling() : void loadAdmin()
+            section === "billing"
+              ? void loadBilling()
+              : section === "chatwork"
+                ? void loadChatwork()
+                : void loadAdmin()
           }
         >
           <RefreshCcw aria-hidden="true" />
@@ -530,6 +705,10 @@ export function AdminPage({ section }: { section: AdminSection }) {
         <NavLink to="/admin/adjustment">
           <Calculator aria-hidden="true" />
           件数調整
+        </NavLink>
+        <NavLink to="/admin/chatwork">
+          <MessageCircle aria-hidden="true" />
+          チャットワーク連携
         </NavLink>
         <NavLink to="/admin/billing">
           <CreditCard aria-hidden="true" />
@@ -761,6 +940,147 @@ export function AdminPage({ section }: { section: AdminSection }) {
           </div>
         </article>
       </section>
+      ) : section === "chatwork" ? (
+        <section className="admin-grid chatwork-grid">
+          <article className="panel chatwork-panel">
+            <div className="panel-title">
+              <MessageCircle aria-hidden="true" />
+              <div>
+                <p className="eyebrow">Chatwork</p>
+                <h2>チャットワーク連携</h2>
+              </div>
+            </div>
+            <div
+              className={`billing-status ${chatworkSettings?.enabled ? "live" : "offline"}`}
+            >
+              <span>
+                {chatworkSettings?.enabled ? "月次通知 有効" : "月次通知 無効"}
+              </span>
+              <strong>毎月3日 9:00送信</strong>
+            </div>
+            <form className="form-stack" onSubmit={handleChatworkSave}>
+              <label>
+                <span>APIトークン</span>
+                <div className="input-shell">
+                  <KeyRound aria-hidden="true" />
+                  <input
+                    autoComplete="off"
+                    onChange={(event) => setChatworkApiToken(event.target.value)}
+                    placeholder={
+                      chatworkSettings?.tokenConfigured
+                        ? "変更する場合のみ入力"
+                        : "Chatwork APIトークン"
+                    }
+                    type="password"
+                    value={chatworkApiToken}
+                  />
+                </div>
+              </label>
+              <label>
+                <span>ルームID</span>
+                <input
+                  inputMode="numeric"
+                  onChange={(event) => setChatworkRoomId(event.target.value)}
+                  placeholder="123456789"
+                  required={chatworkEnabled}
+                  type="text"
+                  value={chatworkRoomId}
+                />
+              </label>
+              <label className="checkbox-field">
+                <input
+                  checked={chatworkEnabled}
+                  onChange={(event) => setChatworkEnabled(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>月次通知を有効にする</span>
+              </label>
+              <button className="button button-primary" disabled={savingChatwork}>
+                <MessageCircle aria-hidden="true" />
+                {savingChatwork ? "保存中..." : "連携設定を保存"}
+              </button>
+            </form>
+          </article>
+
+          <article className="panel chatwork-panel">
+            <div className="panel-title">
+              <Send aria-hidden="true" />
+              <div>
+                <p className="eyebrow">Preview</p>
+                <h2>送信プレビュー</h2>
+              </div>
+            </div>
+            <div className="billing-metrics">
+              <div>
+                <span>対象月</span>
+                <strong>{chatworkPreview?.targetMonthLabel ?? "未取得"}</strong>
+              </div>
+              <div>
+                <span>累計ありがとう</span>
+                <strong>
+                  {formatNumber(chatworkPreview?.cumulativeTotal ?? 0)}
+                </strong>
+              </div>
+              <div>
+                <span>月のありがとう</span>
+                <strong>{formatNumber(chatworkPreview?.monthlyTotal ?? 0)}</strong>
+              </div>
+            </div>
+            <pre className="chatwork-message-preview">
+              {chatworkPreview?.message ?? "読み込み中..."}
+            </pre>
+            <div className="billing-actions">
+              <button
+                className="button button-secondary"
+                disabled={
+                  sendingChatwork !== null ||
+                  loading ||
+                  !chatworkSettings?.enabled ||
+                  !chatworkSettings?.tokenConfigured ||
+                  !chatworkSettings?.roomId
+                }
+                onClick={() => void sendChatwork("send-test")}
+                type="button"
+              >
+                <Send aria-hidden="true" />
+                {sendingChatwork === "test" ? "送信中..." : "テスト送信"}
+              </button>
+              <button
+                className="button button-primary"
+                disabled={
+                  sendingChatwork !== null ||
+                  loading ||
+                  !chatworkSettings?.enabled ||
+                  !chatworkSettings?.tokenConfigured ||
+                  !chatworkSettings?.roomId
+                }
+                onClick={() => void sendChatwork("send-monthly")}
+                type="button"
+              >
+                <MessageCircle aria-hidden="true" />
+                {sendingChatwork === "monthly" ? "送信中..." : "今すぐ月次送信"}
+              </button>
+            </div>
+            <div className="chatwork-last-send">
+              <span>最終送信</span>
+              <strong>
+                {chatworkLastNotification
+                  ? `${formatMonthDate(chatworkLastNotification.target_month)} / ${
+                      chatworkLastNotification.status === "sent"
+                        ? "送信済み"
+                        : "失敗"
+                    }`
+                  : "未送信"}
+              </strong>
+              {chatworkLastNotification?.sent_at ? (
+                <p>{formatDateTime(chatworkLastNotification.sent_at)}</p>
+              ) : null}
+              {chatworkLastNotification?.error_message ? (
+                <p>{chatworkLastNotification.error_message}</p>
+              ) : null}
+            </div>
+          </article>
+        </section>
       ) : (
         <section className="admin-grid billing-grid">
           <article className="panel billing-panel">

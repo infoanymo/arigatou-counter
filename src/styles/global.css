@@ -905,6 +905,10 @@ select:focus {
   grid-template-columns: minmax(0, 980px);
 }
 
+.admin-grid.chatwork-grid {
+  grid-template-columns: minmax(320px, 420px) minmax(0, 560px);
+}
+
 .panel {
   min-width: 0;
   padding: 20px;
@@ -1619,6 +1623,66 @@ select:focus {
   line-height: 1.6;
 }
 
+.chatwork-panel {
+  display: grid;
+  align-content: start;
+  gap: 22px;
+}
+
+.checkbox-field {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.checkbox-field input {
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  accent-color: var(--teal);
+  padding: 0;
+}
+
+.chatwork-message-preview {
+  overflow-x: auto;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  color: var(--ink);
+  font-family:
+    "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.92rem;
+  line-height: 1.7;
+  padding: 14px;
+  white-space: pre-wrap;
+}
+
+.chatwork-last-send {
+  display: grid;
+  gap: 6px;
+  border-left: 4px solid var(--teal);
+  background: rgba(0, 45, 85, 0.05);
+  padding: 12px 14px;
+}
+
+.chatwork-last-send span,
+.chatwork-last-send p {
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 800;
+  line-height: 1.6;
+}
+
+.chatwork-last-send strong {
+  color: var(--teal-dark);
+  font-size: 1rem;
+}
+
 .modal-backdrop {
   position: fixed;
   z-index: 40;
@@ -1915,6 +1979,7 @@ td select {
   .admin-grid,
   .analytics-filter-grid,
   .analytics-summary-grid,
+  .chatwork-grid,
   .billing-hero,
   .billing-metrics,
   .billing-row,

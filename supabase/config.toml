@@ -1,0 +1,2 @@
+[functions.chatwork-notification]
+verify_jwt = false
