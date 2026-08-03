@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   Calculator,
+  CreditCard,
   KeyRound,
   RefreshCcw,
   Trash2,
@@ -45,7 +46,31 @@ type AdjustmentWithProfile = ThankYouAdjustment & {
   profiles: Pick<Profile, "display_name" | "email" | "avatar_url" | "avatar_scale"> | null;
 };
 
-type AdminSection = "account" | "adjustment";
+type AdminSection = "account" | "adjustment" | "billing";
+
+const billingItems = [
+  {
+    name: "GitHub Pages",
+    plan: "Free",
+    monthlyCost: "0円",
+    note: "静的サイト公開。公開リポジトリ運用なら無料枠で想定。",
+  },
+  {
+    name: "Supabase",
+    plan: "Free",
+    monthlyCost: "0円",
+    note: "40人規模のログイン、ありがとう、コメント、いいねは無料枠内で想定。",
+  },
+  {
+    name: "Supabase Pro",
+    plan: "実運用推奨",
+    monthlyCost: "約25ドル/月",
+    note: "会社利用で停止リスクやバックアップ余裕を見たい場合の推奨目安。",
+  },
+] as const;
+
+const billingTotalLabel = "0円/月";
+const billingRecommendedLabel = "約25ドル/月";
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -328,17 +353,22 @@ export function AdminPage({ section }: { section: AdminSection }) {
     }
   }
 
+  const sectionTitle =
+    section === "account" ? "アカウント" : section === "adjustment" ? "件数調整" : "料金";
+  const sectionDescription =
+    section === "account"
+      ? "アカウント発行とユーザー権限を管理します。"
+      : section === "adjustment"
+        ? "ありがとう件数の補正と全削除を管理します。"
+        : "このアプリの運営にかかる利用料の目安を確認します。";
+
   return (
     <div className="admin-page">
       <header className="page-header">
         <div>
           <p className="eyebrow">Admin</p>
-          <h1>{section === "account" ? "アカウント" : "件数調整"}</h1>
-          <p>
-            {section === "account"
-              ? "アカウント発行とユーザー権限を管理します。"
-              : "ありがとう件数の補正と全削除を管理します。"}
-          </p>
+          <h1>{sectionTitle}</h1>
+          <p>{sectionDescription}</p>
         </div>
         <button className="button button-secondary" onClick={() => void loadAdmin()}>
           <RefreshCcw aria-hidden="true" />
@@ -356,6 +386,10 @@ export function AdminPage({ section }: { section: AdminSection }) {
         <NavLink to="/admin/adjustment">
           <Calculator aria-hidden="true" />
           件数調整
+        </NavLink>
+        <NavLink to="/admin/billing">
+          <CreditCard aria-hidden="true" />
+          料金
         </NavLink>
       </nav>
 
@@ -491,7 +525,7 @@ export function AdminPage({ section }: { section: AdminSection }) {
             )}
           </section>
         </>
-      ) : (
+      ) : section === "adjustment" ? (
         <section className="admin-grid single-column">
           <article className="panel">
             <div className="panel-title">
@@ -597,6 +631,46 @@ export function AdminPage({ section }: { section: AdminSection }) {
           </div>
         </article>
       </section>
+      ) : (
+        <section className="admin-grid billing-grid">
+          <article className="panel billing-panel">
+            <div className="panel-title">
+              <CreditCard aria-hidden="true" />
+              <div>
+                <p className="eyebrow">Billing</p>
+                <h2>利用料</h2>
+              </div>
+            </div>
+            <div className="billing-hero">
+              <div>
+                <span>現在の想定利用料</span>
+                <strong>{billingTotalLabel}</strong>
+                <p>GitHub PagesとSupabase Freeで運営する場合の目安です。</p>
+              </div>
+              <div>
+                <span>実運用おすすめ</span>
+                <strong>{billingRecommendedLabel}</strong>
+                <p>Supabase Proへ上げる場合の月額目安です。</p>
+              </div>
+            </div>
+            <div className="billing-list">
+              {billingItems.map((item) => (
+                <div className="billing-row" key={item.name}>
+                  <div>
+                    <strong>{item.name}</strong>
+                    <span>{item.plan}</span>
+                  </div>
+                  <p>{item.note}</p>
+                  <strong>{item.monthlyCost}</strong>
+                </div>
+              ))}
+            </div>
+            <p className="billing-note">
+              実際の請求額はSupabaseやGitHubの契約プラン、通信量、保存容量で変わります。
+              この画面は運営目安の表示で、請求管理画面とは自動連動していません。
+            </p>
+          </article>
+        </section>
       )}
 
       {showClearDialog ? (

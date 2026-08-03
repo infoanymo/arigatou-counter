@@ -4,6 +4,7 @@ import {
   CalendarDays,
   Calculator,
   ChevronDown,
+  CreditCard,
   HeartHandshake,
   LogOut,
   Settings,
@@ -154,6 +155,10 @@ function AppShell({ children }: { children: React.ReactNode }) {
                   <Calculator aria-hidden="true" />
                   件数調整
                 </NavLink>
+                <NavLink to="/admin/billing">
+                  <CreditCard aria-hidden="true" />
+                  料金
+                </NavLink>
               </div>
             </details>
           ) : null}
@@ -268,6 +273,14 @@ export default function App() {
         element={
           <RequireAuth adminOnly>
             <AdminPage section="adjustment" />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin/billing"
+        element={
+          <RequireAuth adminOnly>
+            <AdminPage section="billing" />
           </RequireAuth>
         }
       />

@@ -901,6 +901,10 @@ select:focus {
   grid-template-columns: minmax(0, 760px);
 }
 
+.admin-grid.billing-grid {
+  grid-template-columns: minmax(0, 980px);
+}
+
 .panel {
   min-width: 0;
   padding: 20px;
@@ -1429,6 +1433,101 @@ select:focus {
   font-size: 0.82rem;
 }
 
+.billing-panel {
+  gap: 22px;
+}
+
+.billing-hero {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.billing-hero > div {
+  display: grid;
+  min-height: 150px;
+  align-content: space-between;
+  border: 1px solid rgba(0, 45, 85, 0.14);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(0, 45, 85, 0.96), rgba(39, 126, 166, 0.92)),
+    var(--teal-dark);
+  color: white;
+  padding: 20px;
+}
+
+.billing-hero span {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.billing-hero strong {
+  display: block;
+  margin-top: 10px;
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  line-height: 1;
+}
+
+.billing-hero p {
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 800;
+  line-height: 1.7;
+}
+
+.billing-list {
+  display: grid;
+  gap: 10px;
+}
+
+.billing-row {
+  display: grid;
+  min-height: 78px;
+  grid-template-columns: minmax(160px, 0.7fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  padding: 14px;
+}
+
+.billing-row > div {
+  display: grid;
+  gap: 4px;
+}
+
+.billing-row strong {
+  color: var(--teal-dark);
+  font-size: 1.05rem;
+  line-height: 1.25;
+}
+
+.billing-row > strong {
+  font-size: 1.25rem;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.billing-row span,
+.billing-row p,
+.billing-note {
+  color: var(--muted);
+  font-weight: 800;
+  line-height: 1.7;
+}
+
+.billing-row span {
+  font-size: 0.82rem;
+}
+
+.billing-note {
+  border-left: 4px solid var(--teal);
+  background: rgba(0, 45, 85, 0.05);
+  padding: 12px 14px;
+}
+
 .modal-backdrop {
   position: fixed;
   z-index: 40;
@@ -1725,10 +1824,16 @@ td select {
   .admin-grid,
   .analytics-filter-grid,
   .analytics-summary-grid,
+  .billing-hero,
+  .billing-row,
   .adjustment-summary.four-columns,
   .adjustment-summary,
   .stat-grid {
     grid-template-columns: 1fr;
+  }
+
+  .billing-row > strong {
+    text-align: left;
   }
 
   .person-row {
