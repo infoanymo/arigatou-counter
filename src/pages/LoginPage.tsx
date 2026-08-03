@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { HeartHandshake } from "lucide-react";
 import okiariLogo from "../okiari-logo-clean.jpg";
@@ -36,6 +36,8 @@ function clearPasswordSetupUrl() {
   );
 }
 
+const maxPasswordSetupRecoveryAttempts = 6;
+
 export function LoginPage() {
   const { user, profile, loading, signIn, setPassword, refreshAuth } = useAuth();
   const navigate = useNavigate();
@@ -45,12 +47,56 @@ export function LoginPage() {
   const [newPassword, setNewPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [passwordSetupRecoveryAttempts, setPasswordSetupRecoveryAttempts] =
+    useState(0);
 
   const passwordSetupMode = useMemo(
     () => isPasswordSetupMode(location.search),
     [location.search],
   );
-  const passwordSetupUnavailable = passwordSetupMode && !loading && !user;
+  const recoveringPasswordSetup =
+    passwordSetupMode &&
+    !user &&
+    (loading ||
+      passwordSetupRecoveryAttempts < maxPasswordSetupRecoveryAttempts);
+  const passwordSetupUnavailable =
+    passwordSetupMode &&
+    !loading &&
+    !user &&
+    passwordSetupRecoveryAttempts >= maxPasswordSetupRecoveryAttempts;
+
+  useEffect(() => {
+    if (!passwordSetupMode) {
+      setPasswordSetupRecoveryAttempts(0);
+    }
+  }, [passwordSetupMode]);
+
+  useEffect(() => {
+    if (
+      !passwordSetupMode ||
+      user ||
+      loading ||
+      passwordSetupRecoveryAttempts >= maxPasswordSetupRecoveryAttempts
+    ) {
+      return undefined;
+    }
+
+    const timeout = window.setTimeout(
+      () => {
+        setPasswordSetupRecoveryAttempts((current) => current + 1);
+        void refreshAuth();
+      },
+      passwordSetupRecoveryAttempts === 0 ? 50 : 500,
+    );
+
+    return () => window.clearTimeout(timeout);
+  }, [
+    loading,
+    passwordSetupMode,
+    passwordSetupRecoveryAttempts,
+    refreshAuth,
+    user,
+  ]);
 
   if (!isSupabaseConfigured) {
     return (
@@ -78,7 +124,7 @@ export function LoginPage() {
     return <Navigate to="/" replace />;
   }
 
-  if (passwordSetupMode && loading) {
+  if (recoveringPasswordSetup) {
     return <PasswordSetupLoading />;
   }
 
