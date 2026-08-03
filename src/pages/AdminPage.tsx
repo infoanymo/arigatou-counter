@@ -228,6 +228,8 @@ export function AdminPage({ section }: { section: AdminSection }) {
   const [savingAdjustment, setSavingAdjustment] = useState(false);
   const [clearingThankYous, setClearingThankYous] = useState(false);
   const [showClearDialog, setShowClearDialog] = useState(false);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [billingUsage, setBillingUsage] = useState<BillingUsage | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
@@ -463,6 +465,31 @@ export function AdminPage({ section }: { section: AdminSection }) {
     }
   }
 
+  async function handleDeleteUser() {
+    if (!deleteTarget || deletingUserId) return;
+
+    setDeletingUserId(deleteTarget.id);
+    setMessage(null);
+
+    try {
+      await invokeAdmin({
+        action: "delete-user",
+        userId: deleteTarget.id,
+      });
+      setMessage("アカウントを削除しました。");
+      setDeleteTarget(null);
+      await loadAdmin();
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "アカウントを削除できませんでした。",
+      );
+    } finally {
+      setDeletingUserId(null);
+    }
+  }
+
   const sectionTitle =
     section === "account" ? "アカウント" : section === "adjustment" ? "件数調整" : "料金";
   const sectionDescription =
@@ -576,6 +603,7 @@ export function AdminPage({ section }: { section: AdminSection }) {
                       <th>権限</th>
                       <th>状態</th>
                       <th>最終ログイン</th>
+                      <th>操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -623,6 +651,17 @@ export function AdminPage({ section }: { section: AdminSection }) {
                           {item.lastSignInAt
                             ? formatDateTime(item.lastSignInAt)
                             : "未ログイン"}
+                        </td>
+                        <td>
+                          <button
+                            className="button button-danger table-action-button"
+                            disabled={item.id === user?.id || deletingUserId === item.id}
+                            onClick={() => setDeleteTarget(item)}
+                            type="button"
+                          >
+                            <Trash2 aria-hidden="true" />
+                            削除
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -926,6 +965,49 @@ export function AdminPage({ section }: { section: AdminSection }) {
               >
                 <Trash2 aria-hidden="true" />
                 {clearingThankYous ? "削除中..." : "全削除する"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {deleteTarget ? (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            className="confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-user-title"
+          >
+            <div className="confirm-icon">
+              <TriangleAlert aria-hidden="true" />
+            </div>
+            <div>
+              <p className="eyebrow">Delete</p>
+              <h2 id="delete-user-title">アカウントを削除しますか？</h2>
+              <p>
+                {deleteTarget.displayName || deleteTarget.email}
+                のログインアカウントを削除します。この操作は元に戻せません。
+                ありがとう履歴や件数補正がある場合は、件数を守るため削除されません。
+              </p>
+            </div>
+            <div className="confirm-modal-actions">
+              <button
+                className="button button-secondary"
+                disabled={deletingUserId === deleteTarget.id}
+                onClick={() => setDeleteTarget(null)}
+                type="button"
+              >
+                キャンセル
+              </button>
+              <button
+                className="button button-danger"
+                disabled={deletingUserId === deleteTarget.id}
+                onClick={() => void handleDeleteUser()}
+                type="button"
+              >
+                <Trash2 aria-hidden="true" />
+                {deletingUserId === deleteTarget.id ? "削除中..." : "削除する"}
               </button>
             </div>
           </section>
