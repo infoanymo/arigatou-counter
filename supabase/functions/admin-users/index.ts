@@ -333,61 +333,6 @@ Deno.serve(async (req) => {
     return json({ ok: true });
   }
 
-  if (action === "delete-user") {
-    const userId = cleanText(body.userId);
-
-    if (!userId) {
-      return json({ error: "Valid user id is required." }, 400);
-    }
-
-    if (userId === caller.id) {
-      return json({ error: "You cannot delete your own account here." }, 400);
-    }
-
-    const {
-      data: { user: targetUser },
-      error: targetError,
-    } = await admin.auth.admin.getUserById(userId);
-
-    if (targetError || !targetUser) {
-      return json({ error: targetError?.message ?? "User not found." }, 404);
-    }
-
-    const [
-      { count: eventCount, error: eventCountError },
-      { count: adjustmentCount, error: adjustmentCountError },
-    ] = await Promise.all([
-      admin
-        .from("thank_you_events")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", userId),
-      admin
-        .from("thank_you_adjustments")
-        .select("*", { count: "exact", head: true })
-        .eq("admin_user_id", userId),
-    ]);
-
-    if (eventCountError) return json({ error: eventCountError.message }, 400);
-    if (adjustmentCountError) {
-      return json({ error: adjustmentCountError.message }, 400);
-    }
-
-    if ((eventCount ?? 0) > 0 || (adjustmentCount ?? 0) > 0) {
-      return json(
-        {
-          error:
-            "This user has thank-you history or adjustment history. Disable the account instead to keep existing counts intact.",
-        },
-        409,
-      );
-    }
-
-    const { error } = await admin.auth.admin.deleteUser(userId);
-
-    if (error) return json({ error: error.message }, 400);
-    return json({ ok: true });
-  }
-
   if (action === "adjust-thank-you") {
     const periodId = cleanText(body.periodId);
     const delta = cleanInteger(body.delta);

@@ -1681,16 +1681,9 @@ select:focus {
   margin-top: 18px;
 }
 
-.table-action-button {
-  min-height: 36px;
-  gap: 6px;
-  padding: 0 12px;
-  white-space: nowrap;
-}
-
 table {
   width: 100%;
-  min-width: 820px;
+  min-width: 720px;
   border-collapse: collapse;
 }
 
