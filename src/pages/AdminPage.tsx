@@ -104,14 +104,6 @@ const planLabels = {
   platform: "Platform",
 } as const;
 
-const planBaseMonthlyUsd: Record<keyof typeof planLabels, number | null> = {
-  free: 0,
-  pro: 25,
-  team: 599,
-  enterprise: null,
-  platform: null,
-};
-
 const usdToJpyRate = 158;
 const today = new Date().toISOString().slice(0, 10);
 
@@ -145,11 +137,6 @@ function formatBillingDate(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
-}
-
-function billingPlanCost(usage: BillingUsage | null) {
-  if (!usage?.organization?.plan) return null;
-  return planBaseMonthlyUsd[usage.organization.plan] ?? null;
 }
 
 function billingApiBreakdown(usage: BillingUsage | null) {
@@ -488,12 +475,7 @@ export function AdminPage({ section }: { section: AdminSection }) {
         ? "ありがとう件数の補正と全削除を管理します。"
         : "このアプリの運営にかかる利用料の目安を確認します。";
   const billingBreakdown = billingApiBreakdown(billingUsage);
-  const billingBaseCost = billingPlanCost(billingUsage);
-  const billingAddonCost = billingUsage?.selectedAddonEstimatedMonthlyUsd ?? null;
-  const billingTotalCost =
-    typeof billingBaseCost === "number" && typeof billingAddonCost === "number"
-      ? billingBaseCost + billingAddonCost
-      : null;
+  const billingAddedCost = billingUsage?.selectedAddonEstimatedMonthlyUsd ?? null;
   const billingPlanLabel = billingUsage?.organization?.plan
     ? planLabels[billingUsage.organization.plan]
     : "未取得";
@@ -794,19 +776,19 @@ export function AdminPage({ section }: { section: AdminSection }) {
             </div>
             <div className="billing-hero">
               <div>
-                <span>現在のSupabaseプラン</span>
-                <strong>{billingPlanLabel}</strong>
+                <span>オキアリ追加分</span>
+                <strong>{formatYenFromUsd(billingAddedCost)}</strong>
                 <p>
-                  {billingUsage?.organization
-                    ? `${billingUsage.organization.name} の契約プランです。`
-                    : "Organization情報はまだ取得できていません。"}
+                  このプロジェクトで選択中のCompute/アドオンだけを円換算した月額目安です。
                 </p>
               </div>
               <div>
-                <span>プラン＋選択中アドオン</span>
-                <strong>{formatYenFromUsd(billingTotalCost)}</strong>
+                <span>契約プラン</span>
+                <strong>{billingPlanLabel}</strong>
                 <p>
-                  APIから取得したドル建て価格を円換算した月額目安です。
+                  {billingUsage?.organization
+                    ? `${billingUsage.organization.name} の基本契約です。追加費用の合計には含めません。`
+                    : "Organization情報はまだ取得できていません。"}
                 </p>
               </div>
             </div>
@@ -822,12 +804,12 @@ export function AdminPage({ section }: { section: AdminSection }) {
 
             <div className="billing-metrics">
               <div>
-                <span>プラン基本料</span>
-                <strong>{formatYenFromUsd(billingBaseCost)}</strong>
+                <span>追加費用合計</span>
+                <strong>{formatYenFromUsd(billingAddedCost)}</strong>
               </div>
               <div>
-                <span>選択中アドオン</span>
-                <strong>{formatYenFromUsd(billingAddonCost)}</strong>
+                <span>換算レート</span>
+                <strong>{formatNumber(usdToJpyRate)}円</strong>
               </div>
               <div>
                 <span>APIリクエスト</span>

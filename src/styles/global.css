@@ -1483,19 +1483,22 @@ select:focus {
 
 .billing-hero > div {
   display: grid;
-  min-height: 150px;
+  min-height: 124px;
   align-content: space-between;
-  border: 1px solid rgba(0, 45, 85, 0.14);
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background:
-    linear-gradient(135deg, rgba(0, 45, 85, 0.96), rgba(39, 126, 166, 0.92)),
-    var(--teal-dark);
-  color: white;
-  padding: 20px;
+  background: white;
+  color: var(--ink);
+  padding: 16px;
+}
+
+.billing-hero > div:first-child {
+  border-color: rgba(0, 45, 85, 0.18);
+  background: rgba(0, 45, 85, 0.04);
 }
 
 .billing-hero span {
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--muted);
   font-size: 0.86rem;
   font-weight: 900;
 }
@@ -1503,12 +1506,13 @@ select:focus {
 .billing-hero strong {
   display: block;
   margin-top: 10px;
-  font-size: clamp(2rem, 4vw, 3.2rem);
+  color: var(--teal-dark);
+  font-size: clamp(1.55rem, 3vw, 2.2rem);
   line-height: 1;
 }
 
 .billing-hero p {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--muted);
   font-weight: 800;
   line-height: 1.7;
 }
@@ -1542,7 +1546,7 @@ select:focus {
 
 .billing-metrics strong {
   color: var(--teal-dark);
-  font-size: 1.55rem;
+  font-size: 1.35rem;
   line-height: 1.1;
 }
 
