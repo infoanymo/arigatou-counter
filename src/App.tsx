@@ -22,7 +22,7 @@ import { useAuth } from "./lib/auth";
 import type { Profile } from "./lib/database.types";
 import { isSupabaseConfigured } from "./lib/supabase";
 import { ProfileAvatar } from "./components/ProfileAvatar";
-import okiariLogo from "./okiari-logo-clean.jpg";
+import okifraSidebarLogo from "./okifra-sidebar-logo.png";
 
 function LoadingScreen() {
   return (
@@ -86,7 +86,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="sidebar" aria-label="メインナビゲーション">
         <div className="brand-lockup compact">
           <span className="brand-mark brand-logo-box">
-            <img alt="OkiFra" src={okiariLogo} />
+            <img alt="OkiFra" src={okifraSidebarLogo} />
           </span>
         </div>
         <nav className="nav-list">
