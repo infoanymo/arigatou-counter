@@ -39,6 +39,18 @@ VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your_key
 
 Edge Function側の任意環境変数として `APP_URL` を設定すると、招待メールの戻り先を固定できます。
 
+## 招待メールの日本語テンプレート
+
+Supabase DashboardのAccount > Access Tokensでアクセストークンを発行し、以下を実行するとHosted projectの招待メールテンプレートを日本語に更新できます。
+
+```bash
+SUPABASE_ACCESS_TOKEN=your-access-token pnpm supabase:email:invite
+```
+
+テンプレート本文は `supabase/templates/invite.html` にあります。
+
+新規FreeプランのプロジェクトでSupabaseのデフォルトSMTPを使っている場合、AuthメールテンプレートのカスタマイズにはCustom SMTP設定が必要になることがあります。
+
 ## GitHub Pages
 
 `.github/workflows/deploy.yml` が `main` ブランチへのpushで `dist` をGitHub Pagesへ公開します。

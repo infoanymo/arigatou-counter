@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>オキアリに招待されました</title>
+  </head>
+  <body style="margin:0;background:#f4f8fb;color:#13324d;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Sans','Yu Gothic',Meiryo,sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f8fb;margin:0;padding:32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#ffffff;border-radius:12px;border:1px solid #dbe7f0;max-width:560px;overflow:hidden;">
+            <tr>
+              <td style="background:#003d70;height:8px;line-height:8px;">&nbsp;</td>
+            </tr>
+            <tr>
+              <td style="padding:40px 32px 32px;">
+                <p style="color:#2f6f9f;font-size:13px;font-weight:700;letter-spacing:.08em;margin:0 0 12px;text-transform:uppercase;">Okiari</p>
+                <h1 style="color:#003d70;font-size:26px;line-height:1.35;margin:0 0 20px;">オキアリに招待されました</h1>
+                <p style="font-size:15px;line-height:1.8;margin:0 0 24px;">
+                  オキアリのアカウント作成に招待されています。下のボタンから招待を受け取り、パスワードを設定してください。
+                </p>
+                <p style="margin:0 0 28px;">
+                  <a href="{{ .ConfirmationURL }}" style="background:#003d70;border-radius:8px;color:#ffffff;display:inline-block;font-size:16px;font-weight:700;line-height:1;padding:16px 24px;text-decoration:none;">
+                    パスワードを設定する
+                  </a>
+                </p>
+                <p style="color:#5b7186;font-size:13px;line-height:1.7;margin:0 0 18px;">
+                  ボタンが開けない場合は、以下のURLをブラウザに貼り付けてください。
+                </p>
+                <p style="background:#edf4fa;border-radius:8px;color:#33536c;font-size:12px;line-height:1.6;margin:0 0 28px;padding:14px;word-break:break-all;">
+                  {{ .ConfirmationURL }}
+                </p>
+                <p style="color:#5b7186;font-size:13px;line-height:1.7;margin:0;">
+                  このメールに心当たりがない場合は、何も操作せず破棄してください。
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
