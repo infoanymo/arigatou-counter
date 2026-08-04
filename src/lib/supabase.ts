@@ -15,7 +15,7 @@ export const supabase = isSupabaseConfigured
   ? createClient<Database>(supabaseUrl, publishableKey, {
       auth: {
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        detectSessionInUrl: false,
         flowType: "pkce",
         persistSession: true,
       },

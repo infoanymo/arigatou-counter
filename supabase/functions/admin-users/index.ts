@@ -76,9 +76,10 @@ function passwordSetupRedirectUrl(req: Request) {
     }
     url.search = "";
     url.hash = "";
-    return `${url.toString().replace(/\/$/, "")}/#/login?mode=set-password`;
+    url.searchParams.set("mode", "set-password");
+    return url.toString();
   } catch {
-    return `${base.replace(/[?#].*$/, "").replace(/\/$/, "")}/#/login?mode=set-password`;
+    return `${base.replace(/[?#].*$/, "").replace(/\/$/, "")}/?mode=set-password`;
   }
 }
 

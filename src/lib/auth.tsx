@@ -30,31 +30,28 @@ function fallbackName(email?: string | null) {
   return email.split("@")[0] || email;
 }
 
-function collectNestedHashAuthParams() {
+function collectAuthParamsFromUrl() {
   const params = new URLSearchParams();
-  const hash = window.location.hash.startsWith("#")
-    ? window.location.hash.slice(1)
-    : window.location.hash;
 
   function appendAll(value: string) {
-    const nextParams = new URLSearchParams(value);
+    const cleanValue = value.replace(/^[?#]/, "");
+    if (!cleanValue || !cleanValue.includes("=")) return;
+
+    const nextParams = new URLSearchParams(cleanValue);
     nextParams.forEach((paramValue, key) => {
       params.set(key, paramValue);
     });
   }
 
-  if (!hash) return params;
+  appendAll(window.location.search);
 
-  appendAll(hash);
+  for (const fragment of window.location.href.split("#").slice(1)) {
+    appendAll(fragment);
 
-  const routeQueryStart = hash.indexOf("?");
-  if (routeQueryStart >= 0) {
-    appendAll(hash.slice(routeQueryStart + 1).split("#")[0]);
-  }
-
-  const nestedHashStart = hash.indexOf("#");
-  if (nestedHashStart >= 0) {
-    appendAll(hash.slice(nestedHashStart + 1));
+    const routeQueryStart = fragment.indexOf("?");
+    if (routeQueryStart >= 0) {
+      appendAll(fragment.slice(routeQueryStart + 1));
+    }
   }
 
   return params;
@@ -71,10 +68,21 @@ function cleanPasswordSetupUrl() {
 async function recoverNestedHashSession() {
   if (!supabase) return;
 
-  const params = collectNestedHashAuthParams();
+  const params = collectAuthParamsFromUrl();
   const accessToken = params.get("access_token");
   const refreshToken = params.get("refresh_token");
   const code = params.get("code");
+  const tokenHash = params.get("token_hash");
+  const type = params.get("type");
+
+  if (tokenHash && (type === "invite" || type === "recovery")) {
+    const { error } = await supabase.auth.verifyOtp({
+      token_hash: tokenHash,
+      type,
+    });
+    if (!error) cleanPasswordSetupUrl();
+    return;
+  }
 
   if (accessToken && refreshToken) {
     const { error } = await supabase.auth.setSession({
