@@ -20,6 +20,7 @@ import type {
   Profile,
   ProfileStatus,
   ThankYouAdjustment,
+  ThankYouEvent,
 } from "../lib/database.types";
 import { formatDateTime, formatNumber } from "../lib/format";
 import { getSupabase } from "../lib/supabase";
@@ -49,6 +50,18 @@ type PeriodForm = {
 
 type AdjustmentWithProfile = ThankYouAdjustment & {
   profiles: Pick<Profile, "display_name" | "email" | "avatar_url" | "avatar_scale"> | null;
+};
+
+type ThankYouEventWithProfile = ThankYouEvent & {
+  profiles: Pick<
+    Profile,
+    "display_name" | "email" | "company_name" | "avatar_url" | "avatar_scale"
+  > | null;
+};
+
+type EventInteractionCounts = {
+  likes: number;
+  comments: number;
 };
 
 type AdminSection = "account" | "adjustment" | "billing" | "chatwork";
@@ -240,6 +253,14 @@ function formatMonthDate(value: string | null | undefined) {
   }).format(new Date(`${value}T00:00:00+09:00`));
 }
 
+function thankYouEventUserName(event: ThankYouEventWithProfile | null) {
+  return event?.profiles?.display_name || event?.profiles?.email || "メンバー";
+}
+
+function shortEventId(value: string) {
+  return value.slice(0, 8);
+}
+
 function billingApiBreakdown(usage: BillingUsage | null) {
   const latest = usage?.apiCounts?.at(-1);
   if (!latest) {
@@ -358,15 +379,28 @@ export function AdminPage({ section }: { section: AdminSection }) {
   const [periodForm, setPeriodForm] = useState<PeriodForm>(defaultPeriodForm);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [adjustments, setAdjustments] = useState<AdjustmentWithProfile[]>([]);
+  const [thankYouEvents, setThankYouEvents] = useState<ThankYouEventWithProfile[]>(
+    [],
+  );
+  const [eventInteractionCounts, setEventInteractionCounts] = useState<
+    Record<string, EventInteractionCounts>
+  >({});
   const [eventCount, setEventCount] = useState(0);
   const [accountEmail, setAccountEmail] = useState("");
   const [accountRole, setAccountRole] = useState<"member" | "admin">("member");
   const [adjustmentDelta, setAdjustmentDelta] = useState("");
   const [adjustmentReason, setAdjustmentReason] = useState("");
+  const [thankYouUserFilter, setThankYouUserFilter] = useState("all");
   const [loading, setLoading] = useState(true);
+  const [loadingThankYouEvents, setLoadingThankYouEvents] = useState(false);
   const [creatingAccount, setCreatingAccount] = useState(false);
   const [savingAdjustment, setSavingAdjustment] = useState(false);
   const [clearingThankYous, setClearingThankYous] = useState(false);
+  const [thankYouEventToDelete, setThankYouEventToDelete] =
+    useState<ThankYouEventWithProfile | null>(null);
+  const [deletingThankYouEventId, setDeletingThankYouEventId] = useState<
+    string | null
+  >(null);
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [billingUsage, setBillingUsage] = useState<BillingUsage | null>(null);
@@ -402,6 +436,74 @@ export function AdminPage({ section }: { section: AdminSection }) {
         return a.email.localeCompare(b.email);
       }),
     [users],
+  );
+
+  const loadThankYouEventList = useCallback(
+    async (periodId: string, userId: string) => {
+      const client = getSupabase();
+      setLoadingThankYouEvents(true);
+
+      let query = client
+        .from("thank_you_events")
+        .select(
+          "id, period_id, user_id, created_at, profiles:profiles!thank_you_events_user_id_fkey(display_name,email,company_name,avatar_url,avatar_scale)",
+        )
+        .eq("period_id", periodId)
+        .order("created_at", { ascending: false })
+        .limit(200);
+
+      if (userId !== "all") {
+        query = query.eq("user_id", userId);
+      }
+
+      const { data, error } = await query.returns<ThankYouEventWithProfile[]>();
+
+      if (error) {
+        setMessage("個別削除用のありがとう一覧を読み込めませんでした。");
+        setThankYouEvents([]);
+        setEventInteractionCounts({});
+        setLoadingThankYouEvents(false);
+        return;
+      }
+
+      const events = data ?? [];
+      const eventIds = events.map((event) => event.id);
+      const counts = Object.fromEntries(
+        eventIds.map((eventId) => [eventId, { likes: 0, comments: 0 }]),
+      ) as Record<string, EventInteractionCounts>;
+
+      if (eventIds.length) {
+        const [likesResult, commentsResult] = await Promise.all([
+          client
+            .from("thank_you_likes")
+            .select("event_id")
+            .in("event_id", eventIds)
+            .returns<Array<{ event_id: string }>>(),
+          client
+            .from("thank_you_comments")
+            .select("event_id")
+            .in("event_id", eventIds)
+            .returns<Array<{ event_id: string }>>(),
+        ]);
+
+        if (likesResult.error || commentsResult.error) {
+          setMessage("ありがとうの反応数を一部読み込めませんでした。");
+        }
+
+        for (const like of likesResult.data ?? []) {
+          if (counts[like.event_id]) counts[like.event_id].likes += 1;
+        }
+
+        for (const comment of commentsResult.data ?? []) {
+          if (counts[comment.event_id]) counts[comment.event_id].comments += 1;
+        }
+      }
+
+      setThankYouEvents(events);
+      setEventInteractionCounts(counts);
+      setLoadingThankYouEvents(false);
+    },
+    [],
   );
 
   const loadAdjustmentSummary = useCallback(async (periodId: string) => {
@@ -454,6 +556,8 @@ export function AdminPage({ section }: { section: AdminSection }) {
     if (periodError) {
       setMessage("期設定を読み込めませんでした。");
       setAdjustments([]);
+      setThankYouEvents([]);
+      setEventInteractionCounts({});
       setEventCount(0);
     } else {
       setPeriodForm(formFromPeriod(period));
@@ -461,6 +565,8 @@ export function AdminPage({ section }: { section: AdminSection }) {
         await loadAdjustmentSummary(period.id);
       } else {
         setAdjustments([]);
+        setThankYouEvents([]);
+        setEventInteractionCounts({});
         setEventCount(0);
       }
     }
@@ -542,6 +648,11 @@ export function AdminPage({ section }: { section: AdminSection }) {
 
     void loadAdmin();
   }, [loadAdmin, loadBilling, loadChatwork, section]);
+
+  useEffect(() => {
+    if (section !== "adjustment" || !periodForm.id) return;
+    void loadThankYouEventList(periodForm.id, thankYouUserFilter);
+  }, [loadThankYouEventList, periodForm.id, section, thankYouUserFilter]);
 
   async function handleCreateAccount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -628,6 +739,35 @@ export function AdminPage({ section }: { section: AdminSection }) {
       );
     } finally {
       setClearingThankYous(false);
+    }
+  }
+
+  async function handleDeleteThankYouEvent() {
+    if (!periodForm.id || !thankYouEventToDelete) return;
+
+    setDeletingThankYouEventId(thankYouEventToDelete.id);
+    setMessage(null);
+
+    try {
+      await invokeAdmin({
+        action: "delete-thank-you-event",
+        periodId: periodForm.id,
+        eventId: thankYouEventToDelete.id,
+      });
+      setMessage("選択したありがとうを削除しました。");
+      setThankYouEventToDelete(null);
+      await Promise.all([
+        loadAdjustmentSummary(periodForm.id),
+        loadThankYouEventList(periodForm.id, thankYouUserFilter),
+      ]);
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "選択したありがとうを削除できませんでした。",
+      );
+    } finally {
+      setDeletingThankYouEventId(null);
     }
   }
 
@@ -1000,6 +1140,91 @@ export function AdminPage({ section }: { section: AdminSection }) {
               {savingAdjustment ? "登録中..." : "補正を登録"}
             </button>
           </form>
+          <section className="thank-you-delete-panel">
+            <div className="subsection-heading">
+              <div>
+                <p className="eyebrow">Delete</p>
+                <h3>個別ありがとう削除</h3>
+              </div>
+              <button
+                className="button button-secondary"
+                disabled={loadingThankYouEvents || !periodForm.id}
+                onClick={() =>
+                  periodForm.id
+                    ? void loadThankYouEventList(
+                        periodForm.id,
+                        thankYouUserFilter,
+                      )
+                    : undefined
+                }
+                type="button"
+              >
+                <RefreshCcw aria-hidden="true" />
+                更新
+              </button>
+            </div>
+            <label>
+              <span>対象メンバー</span>
+              <select
+                onChange={(event) => setThankYouUserFilter(event.target.value)}
+                value={thankYouUserFilter}
+              >
+                <option value="all">全員</option>
+                {sortedUsers.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.displayName || item.email}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="thank-you-delete-list">
+              {loadingThankYouEvents ? (
+                <p className="muted">読み込み中...</p>
+              ) : thankYouEvents.length ? (
+                thankYouEvents.map((item) => {
+                  const counts = eventInteractionCounts[item.id] ?? {
+                    likes: 0,
+                    comments: 0,
+                  };
+
+                  return (
+                    <article className="thank-you-delete-row" key={item.id}>
+                      <div className="adjustment-user">
+                        <ProfileAvatar
+                          name={thankYouEventUserName(item)}
+                          src={item.profiles?.avatar_url}
+                          avatarScale={item.profiles?.avatar_scale}
+                          size="sm"
+                        />
+                        <div>
+                          <span>{thankYouEventUserName(item)}</span>
+                          <p>
+                            {formatDateTime(item.created_at)} / ID{" "}
+                            {shortEventId(item.id)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="thank-you-delete-meta">
+                        <span>いいね {formatNumber(counts.likes)}</span>
+                        <span>コメント {formatNumber(counts.comments)}</span>
+                      </div>
+                      <button
+                        className="button button-danger"
+                        disabled={deletingThankYouEventId === item.id}
+                        onClick={() => setThankYouEventToDelete(item)}
+                        type="button"
+                      >
+                        <Trash2 aria-hidden="true" />
+                        削除
+                      </button>
+                    </article>
+                  );
+                })
+              ) : (
+                <p className="muted">該当するありがとうはありません。</p>
+              )}
+            </div>
+          </section>
           <button
             className="button button-danger full-width-button"
             disabled={clearingThankYous || !periodForm.id}
@@ -1456,6 +1681,53 @@ export function AdminPage({ section }: { section: AdminSection }) {
               >
                 <Trash2 aria-hidden="true" />
                 {clearingThankYous ? "削除中..." : "全削除する"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {thankYouEventToDelete ? (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            className="confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-thank-you-event-title"
+          >
+            <div className="confirm-icon">
+              <TriangleAlert aria-hidden="true" />
+            </div>
+            <div>
+              <p className="eyebrow">Delete</p>
+              <h2 id="delete-thank-you-event-title">
+                このありがとうを削除しますか？
+              </h2>
+              <p>
+                {thankYouEventUserName(thankYouEventToDelete)} /{" "}
+                {formatDateTime(thankYouEventToDelete.created_at)} / ID{" "}
+                {shortEventId(thankYouEventToDelete.id)}
+              </p>
+            </div>
+            <div className="confirm-modal-actions">
+              <button
+                className="button button-secondary"
+                disabled={deletingThankYouEventId === thankYouEventToDelete.id}
+                onClick={() => setThankYouEventToDelete(null)}
+                type="button"
+              >
+                キャンセル
+              </button>
+              <button
+                className="button button-danger"
+                disabled={deletingThankYouEventId === thankYouEventToDelete.id}
+                onClick={() => void handleDeleteThankYouEvent()}
+                type="button"
+              >
+                <Trash2 aria-hidden="true" />
+                {deletingThankYouEventId === thankYouEventToDelete.id
+                  ? "削除中..."
+                  : "削除する"}
               </button>
             </div>
           </section>

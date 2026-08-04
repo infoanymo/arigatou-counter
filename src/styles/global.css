@@ -1399,6 +1399,66 @@ textarea {
   margin-top: 18px;
 }
 
+.thank-you-delete-panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 24px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 45, 85, 0.035);
+  padding: 16px;
+}
+
+.subsection-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.subsection-heading h3 {
+  color: var(--ink);
+  font-size: 1.08rem;
+  line-height: 1.3;
+}
+
+.thank-you-delete-list {
+  display: grid;
+  gap: 10px;
+}
+
+.thank-you-delete-row {
+  display: grid;
+  min-height: 68px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 10px 12px;
+}
+
+.thank-you-delete-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.thank-you-delete-meta span {
+  border: 1px solid rgba(0, 45, 85, 0.12);
+  border-radius: 999px;
+  background: var(--surface-strong);
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 900;
+  line-height: 1;
+  padding: 7px 9px;
+  white-space: nowrap;
+}
+
 .adjustment-row {
   display: grid;
   min-height: 56px;
@@ -2079,6 +2139,15 @@ td select {
 
   .billing-row > strong {
     text-align: left;
+  }
+
+  .thank-you-delete-row {
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
+
+  .thank-you-delete-meta {
+    justify-content: flex-start;
   }
 
   .person-row {
