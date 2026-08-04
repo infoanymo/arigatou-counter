@@ -261,6 +261,13 @@ function shortEventId(value: string) {
   return value.slice(0, 8);
 }
 
+function localDateTimeToIso(value: string) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
 function billingApiBreakdown(usage: BillingUsage | null) {
   const latest = usage?.apiCounts?.at(-1);
   if (!latest) {
@@ -390,7 +397,9 @@ export function AdminPage({ section }: { section: AdminSection }) {
   const [accountRole, setAccountRole] = useState<"member" | "admin">("member");
   const [adjustmentDelta, setAdjustmentDelta] = useState("");
   const [adjustmentReason, setAdjustmentReason] = useState("");
-  const [thankYouUserFilter, setThankYouUserFilter] = useState("all");
+  const [thankYouStartFilter, setThankYouStartFilter] = useState("");
+  const [thankYouEndFilter, setThankYouEndFilter] = useState("");
+  const [thankYouKeywordFilter, setThankYouKeywordFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadingThankYouEvents, setLoadingThankYouEvents] = useState(false);
   const [creatingAccount, setCreatingAccount] = useState(false);
@@ -438,8 +447,28 @@ export function AdminPage({ section }: { section: AdminSection }) {
     [users],
   );
 
+  const filteredThankYouEvents = useMemo(() => {
+    const keyword = thankYouKeywordFilter.trim().toLocaleLowerCase("ja-JP");
+    if (!keyword) return thankYouEvents;
+
+    return thankYouEvents.filter((event) => {
+      const searchable = [
+        thankYouEventUserName(event),
+        event.profiles?.email,
+        event.profiles?.company_name,
+        event.id,
+        formatDateTime(event.created_at),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLocaleLowerCase("ja-JP");
+
+      return searchable.includes(keyword);
+    });
+  }, [thankYouEvents, thankYouKeywordFilter]);
+
   const loadThankYouEventList = useCallback(
-    async (periodId: string, userId: string) => {
+    async (periodId: string) => {
       const client = getSupabase();
       setLoadingThankYouEvents(true);
 
@@ -450,11 +479,13 @@ export function AdminPage({ section }: { section: AdminSection }) {
         )
         .eq("period_id", periodId)
         .order("created_at", { ascending: false })
-        .limit(200);
+        .limit(500);
 
-      if (userId !== "all") {
-        query = query.eq("user_id", userId);
-      }
+      const startIso = localDateTimeToIso(thankYouStartFilter);
+      const endIso = localDateTimeToIso(thankYouEndFilter);
+
+      if (startIso) query = query.gte("created_at", startIso);
+      if (endIso) query = query.lte("created_at", endIso);
 
       const { data, error } = await query.returns<ThankYouEventWithProfile[]>();
 
@@ -503,7 +534,7 @@ export function AdminPage({ section }: { section: AdminSection }) {
       setEventInteractionCounts(counts);
       setLoadingThankYouEvents(false);
     },
-    [],
+    [thankYouEndFilter, thankYouStartFilter],
   );
 
   const loadAdjustmentSummary = useCallback(async (periodId: string) => {
@@ -651,8 +682,8 @@ export function AdminPage({ section }: { section: AdminSection }) {
 
   useEffect(() => {
     if (section !== "adjustment" || !periodForm.id) return;
-    void loadThankYouEventList(periodForm.id, thankYouUserFilter);
-  }, [loadThankYouEventList, periodForm.id, section, thankYouUserFilter]);
+    void loadThankYouEventList(periodForm.id);
+  }, [loadThankYouEventList, periodForm.id, section]);
 
   async function handleCreateAccount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -758,7 +789,7 @@ export function AdminPage({ section }: { section: AdminSection }) {
       setThankYouEventToDelete(null);
       await Promise.all([
         loadAdjustmentSummary(periodForm.id),
-        loadThankYouEventList(periodForm.id, thankYouUserFilter),
+        loadThankYouEventList(periodForm.id),
       ]);
     } catch (error) {
       setMessage(
@@ -1151,10 +1182,7 @@ export function AdminPage({ section }: { section: AdminSection }) {
                 disabled={loadingThankYouEvents || !periodForm.id}
                 onClick={() =>
                   periodForm.id
-                    ? void loadThankYouEventList(
-                        periodForm.id,
-                        thankYouUserFilter,
-                      )
+                    ? void loadThankYouEventList(periodForm.id)
                     : undefined
                 }
                 type="button"
@@ -1163,25 +1191,38 @@ export function AdminPage({ section }: { section: AdminSection }) {
                 更新
               </button>
             </div>
-            <label>
-              <span>対象メンバー</span>
-              <select
-                onChange={(event) => setThankYouUserFilter(event.target.value)}
-                value={thankYouUserFilter}
-              >
-                <option value="all">全員</option>
-                {sortedUsers.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.displayName || item.email}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="thank-you-delete-controls">
+              <label>
+                <span>開始日時</span>
+                <input
+                  onChange={(event) => setThankYouStartFilter(event.target.value)}
+                  type="datetime-local"
+                  value={thankYouStartFilter}
+                />
+              </label>
+              <label>
+                <span>終了日時</span>
+                <input
+                  onChange={(event) => setThankYouEndFilter(event.target.value)}
+                  type="datetime-local"
+                  value={thankYouEndFilter}
+                />
+              </label>
+              <label>
+                <span>補助検索</span>
+                <input
+                  onChange={(event) => setThankYouKeywordFilter(event.target.value)}
+                  placeholder="名前・メール・ID"
+                  type="search"
+                  value={thankYouKeywordFilter}
+                />
+              </label>
+            </div>
             <div className="thank-you-delete-list">
               {loadingThankYouEvents ? (
                 <p className="muted">読み込み中...</p>
-              ) : thankYouEvents.length ? (
-                thankYouEvents.map((item) => {
+              ) : filteredThankYouEvents.length ? (
+                filteredThankYouEvents.map((item) => {
                   const counts = eventInteractionCounts[item.id] ?? {
                     likes: 0,
                     comments: 0,
@@ -1189,6 +1230,10 @@ export function AdminPage({ section }: { section: AdminSection }) {
 
                   return (
                     <article className="thank-you-delete-row" key={item.id}>
+                      <div className="thank-you-delete-time">
+                        <strong>{formatDateTime(item.created_at)}</strong>
+                        <span>ID {shortEventId(item.id)}</span>
+                      </div>
                       <div className="adjustment-user">
                         <ProfileAvatar
                           name={thankYouEventUserName(item)}
@@ -1198,10 +1243,7 @@ export function AdminPage({ section }: { section: AdminSection }) {
                         />
                         <div>
                           <span>{thankYouEventUserName(item)}</span>
-                          <p>
-                            {formatDateTime(item.created_at)} / ID{" "}
-                            {shortEventId(item.id)}
-                          </p>
+                          <p>{item.profiles?.email || "メール未設定"}</p>
                         </div>
                       </div>
                       <div className="thank-you-delete-meta">
@@ -1215,7 +1257,7 @@ export function AdminPage({ section }: { section: AdminSection }) {
                         type="button"
                       >
                         <Trash2 aria-hidden="true" />
-                        削除
+                        このありがとうを削除
                       </button>
                     </article>
                   );

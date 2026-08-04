@@ -1423,6 +1423,12 @@ textarea {
   line-height: 1.3;
 }
 
+.thank-you-delete-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .thank-you-delete-list {
   display: grid;
   gap: 10px;
@@ -1431,13 +1437,30 @@ textarea {
 .thank-you-delete-row {
   display: grid;
   min-height: 68px;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(150px, 0.6fr) minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: white;
   padding: 10px 12px;
+}
+
+.thank-you-delete-time {
+  display: grid;
+  gap: 5px;
+}
+
+.thank-you-delete-time strong {
+  color: var(--teal-dark);
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.thank-you-delete-time span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
 }
 
 .thank-you-delete-meta {
@@ -2139,6 +2162,10 @@ td select {
 
   .billing-row > strong {
     text-align: left;
+  }
+
+  .thank-you-delete-controls {
+    grid-template-columns: 1fr;
   }
 
   .thank-you-delete-row {
