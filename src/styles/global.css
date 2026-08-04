@@ -275,7 +275,8 @@ label {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
   min-height: 44px;
   border: 1px solid var(--line);
@@ -286,15 +287,24 @@ select {
   outline: 0;
 }
 
-input::placeholder {
+input::placeholder,
+textarea::placeholder {
   color: rgba(101, 112, 131, 0.34);
   opacity: 1;
 }
 
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   border-color: var(--teal);
   box-shadow: 0 0 0 3px rgba(15, 139, 141, 0.16);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 120px;
+  line-height: 1.6;
+  padding: 12px;
 }
 
 .input-shell {
@@ -1647,6 +1657,79 @@ select:focus {
   padding: 0;
 }
 
+.chatwork-room-list,
+.chatwork-preview-list,
+.chatwork-notification-list {
+  display: grid;
+  gap: 14px;
+}
+
+.chatwork-room-config {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  padding: 14px;
+}
+
+.chatwork-room-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chatwork-room-toggle {
+  min-width: 0;
+}
+
+.chatwork-room-toggle span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatwork-room-remove {
+  flex: 0 0 auto;
+  border: 1px solid rgba(180, 35, 24, 0.18);
+}
+
+.chatwork-message-template {
+  min-height: 190px;
+  font-family:
+    "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.9rem;
+}
+
+.chatwork-preview-item {
+  display: grid;
+  gap: 8px;
+}
+
+.chatwork-preview-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.chatwork-preview-heading strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--teal-dark);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatwork-preview-heading span {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
 .chatwork-message-preview {
   overflow-x: auto;
   margin: 0;
@@ -1681,6 +1764,11 @@ select:focus {
 .chatwork-last-send strong {
   color: var(--teal-dark);
   font-size: 1rem;
+}
+
+.chatwork-notification-row {
+  display: grid;
+  gap: 4px;
 }
 
 .modal-backdrop {

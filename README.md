@@ -42,11 +42,19 @@ Edge Function側の任意環境変数として `APP_URL` を設定すると、�
 
 ## Chatwork月次通知
 
-管理画面の「管理 > チャットワーク連携」でChatwork APIトークンとルームIDを保存できます。APIトークンは画面に再表示せず、Edge Function経由でのみ使用します。
+管理画面の「管理 > チャットワーク連携」でChatwork APIトークン、送信先ルーム、ルームごとの本文テンプレートを保存できます。APIトークンは画面に再表示せず、Edge Function経由でのみ使用します。
+
+本文テンプレートでは以下の置換タグを使えます。
+
+- `{{cumulativeTotal}}`: 累計ありがとう
+- `{{monthlyTotal}}`: 対象月のありがとう
+- `{{targetMonth}}`: 対象月の表示名（例: 7月）
+- `{{targetMonthStart}}`: 対象月の開始日（例: 2026-07-01）
 
 Supabase側では以下を設定してください。
 
 1. SQL Editorで `supabase/schema.sql` の最新版を実行します。
+   既存環境へ今回のChatwork複数ルーム対応だけを反映する場合は、代わりに `supabase/chatwork-multi-room-migration.sql` を実行できます。
 2. Edge Function `chatwork-notification` をデプロイします。
    `supabase/config.toml` で `verify_jwt = false` にしていますが、Function内部で管理者JWTまたはサービスキーを検証します。
 3. `supabase/chatwork-cron.sql` の `PASTE_SUPABASE_SERVICE_ROLE_OR_SECRET_KEY_HERE` をSupabaseのサービスキーに置き換えて、SQL Editorで実行します。

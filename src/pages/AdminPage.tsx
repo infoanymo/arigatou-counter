@@ -7,6 +7,7 @@ import {
   KeyRound,
   MailPlus,
   MessageCircle,
+  Plus,
   RefreshCcw,
   Send,
   Trash2,
@@ -102,8 +103,23 @@ type BillingUsage = {
 type ChatworkSettings = {
   enabled: boolean;
   roomId: string;
+  rooms: ChatworkRoomSettings[];
   tokenConfigured: boolean;
   updatedAt: string | null;
+};
+
+type ChatworkRoomSettings = {
+  id: string;
+  name: string;
+  roomId: string;
+  messageTemplate: string;
+  enabled: boolean;
+};
+
+type ChatworkMessagePreview = {
+  roomId: string;
+  roomName: string;
+  message: string;
 };
 
 type ChatworkPreview = {
@@ -114,10 +130,13 @@ type ChatworkPreview = {
   cumulativeTotal: number;
   monthlyTotal: number;
   message: string;
+  messages: ChatworkMessagePreview[];
 };
 
 type ChatworkNotification = {
   target_month: string;
+  room_id: string | null;
+  room_name: string | null;
   status: "sent" | "failed";
   cumulative_count: number | null;
   monthly_count: number | null;
@@ -130,6 +149,7 @@ type ChatworkSettingsResponse = {
   settings: ChatworkSettings;
   preview: ChatworkPreview;
   lastNotification: ChatworkNotification | null;
+  lastNotifications?: ChatworkNotification[];
 };
 
 const planLabels = {
@@ -142,6 +162,43 @@ const planLabels = {
 
 const usdToJpyRate = 158;
 const today = new Date().toISOString().slice(0, 10);
+const defaultChatworkMessageTemplate = `[toall]
+[info][title]内容：ありがとう集計[/title]
+担当部署：CS/CX
+【通知内容】
+累計ありがとう：{{cumulativeTotal}}
+{{targetMonth}}のありがとう：{{monthlyTotal}}[/info]`;
+
+function chatworkRoomLocalId() {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function createChatworkRoom(
+  overrides: Partial<ChatworkRoomSettings> = {},
+): ChatworkRoomSettings {
+  return {
+    id: overrides.id ?? chatworkRoomLocalId(),
+    name: overrides.name ?? "",
+    roomId: overrides.roomId ?? "",
+    messageTemplate: overrides.messageTemplate ?? defaultChatworkMessageTemplate,
+    enabled: overrides.enabled ?? true,
+  };
+}
+
+function normalizeChatworkRooms(rooms: ChatworkRoomSettings[] | undefined) {
+  return rooms?.length
+    ? rooms.map((room) =>
+        createChatworkRoom({
+          ...room,
+          messageTemplate: room.messageTemplate || defaultChatworkMessageTemplate,
+        }),
+      )
+    : [createChatworkRoom()];
+}
 
 function parseIntegerInput(value: string) {
   return Number(value.replace(/,/g, ""));
@@ -318,10 +375,13 @@ export function AdminPage({ section }: { section: AdminSection }) {
     useState<ChatworkSettings | null>(null);
   const [chatworkPreview, setChatworkPreview] =
     useState<ChatworkPreview | null>(null);
-  const [chatworkLastNotification, setChatworkLastNotification] =
-    useState<ChatworkNotification | null>(null);
+  const [chatworkLastNotifications, setChatworkLastNotifications] = useState<
+    ChatworkNotification[]
+  >([]);
   const [chatworkApiToken, setChatworkApiToken] = useState("");
-  const [chatworkRoomId, setChatworkRoomId] = useState("");
+  const [chatworkRooms, setChatworkRooms] = useState<ChatworkRoomSettings[]>(() => [
+    createChatworkRoom(),
+  ]);
   const [chatworkEnabled, setChatworkEnabled] = useState(false);
   const [savingChatwork, setSavingChatwork] = useState(false);
   const [sendingChatwork, setSendingChatwork] = useState<"test" | "monthly" | null>(
@@ -450,8 +510,11 @@ export function AdminPage({ section }: { section: AdminSection }) {
 
       setChatworkSettings(response.settings);
       setChatworkPreview(response.preview);
-      setChatworkLastNotification(response.lastNotification);
-      setChatworkRoomId(response.settings.roomId);
+      setChatworkLastNotifications(
+        response.lastNotifications ??
+          (response.lastNotification ? [response.lastNotification] : []),
+      );
+      setChatworkRooms(normalizeChatworkRooms(response.settings.rooms));
       setChatworkEnabled(response.settings.enabled);
       setChatworkApiToken("");
     } catch (error) {
@@ -590,6 +653,25 @@ export function AdminPage({ section }: { section: AdminSection }) {
     }
   }
 
+  function updateChatworkRoom(
+    roomId: string,
+    updates: Partial<ChatworkRoomSettings>,
+  ) {
+    setChatworkRooms((current) =>
+      current.map((room) => (room.id === roomId ? { ...room, ...updates } : room)),
+    );
+  }
+
+  function addChatworkRoom() {
+    setChatworkRooms((current) => [...current, createChatworkRoom()]);
+  }
+
+  function removeChatworkRoom(roomId: string) {
+    setChatworkRooms((current) =>
+      current.length > 1 ? current.filter((room) => room.id !== roomId) : current,
+    );
+  }
+
   async function handleChatworkSave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSavingChatwork(true);
@@ -599,7 +681,13 @@ export function AdminPage({ section }: { section: AdminSection }) {
       await invokeChatwork({
         action: "save-settings",
         apiToken: chatworkApiToken.trim(),
-        roomId: chatworkRoomId.trim(),
+        rooms: chatworkRooms.map((room) => ({
+          id: room.id,
+          name: room.name.trim(),
+          roomId: room.roomId.trim(),
+          messageTemplate: room.messageTemplate,
+          enabled: room.enabled,
+        })),
         enabled: chatworkEnabled,
       });
       setMessage("チャットワーク連携を保存しました。");
@@ -670,6 +758,26 @@ export function AdminPage({ section }: { section: AdminSection }) {
   const billingPlanLabel = billingUsage?.organization?.plan
     ? planLabels[billingUsage.organization.plan]
     : "未取得";
+  const configuredChatworkRooms =
+    chatworkSettings?.rooms.filter((room) => room.enabled && room.roomId.trim()) ??
+    [];
+  const canSendChatwork = Boolean(
+    chatworkSettings?.enabled &&
+      chatworkSettings?.tokenConfigured &&
+      configuredChatworkRooms.length,
+  );
+  const chatworkPreviewMessages =
+    chatworkPreview?.messages?.length
+      ? chatworkPreview.messages
+      : chatworkPreview
+        ? [
+            {
+              roomId: chatworkSettings?.roomId ?? "",
+              roomName: "送信プレビュー",
+              message: chatworkPreview.message,
+            },
+          ]
+        : [];
 
   return (
     <div className="admin-page">
@@ -976,17 +1084,6 @@ export function AdminPage({ section }: { section: AdminSection }) {
                   />
                 </div>
               </label>
-              <label>
-                <span>ルームID</span>
-                <input
-                  inputMode="numeric"
-                  onChange={(event) => setChatworkRoomId(event.target.value)}
-                  placeholder="123456789"
-                  required={chatworkEnabled}
-                  type="text"
-                  value={chatworkRoomId}
-                />
-              </label>
               <label className="checkbox-field">
                 <input
                   checked={chatworkEnabled}
@@ -995,6 +1092,88 @@ export function AdminPage({ section }: { section: AdminSection }) {
                 />
                 <span>月次通知を有効にする</span>
               </label>
+              <div className="chatwork-room-list">
+                {chatworkRooms.map((room, index) => (
+                  <section className="chatwork-room-config" key={room.id}>
+                    <div className="chatwork-room-header">
+                      <label className="checkbox-field chatwork-room-toggle">
+                        <input
+                          checked={room.enabled}
+                          onChange={(event) =>
+                            updateChatworkRoom(room.id, {
+                              enabled: event.target.checked,
+                            })
+                          }
+                          type="checkbox"
+                        />
+                        <span>{room.name.trim() || `送信先 ${index + 1}`}</span>
+                      </label>
+                      {chatworkRooms.length > 1 ? (
+                        <button
+                          aria-label="送信先を削除"
+                          className="icon-button chatwork-room-remove"
+                          onClick={() => removeChatworkRoom(room.id)}
+                          type="button"
+                        >
+                          <Trash2 aria-hidden="true" />
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="form-grid chatwork-room-fields">
+                      <label>
+                        <span>表示名</span>
+                        <input
+                          onChange={(event) =>
+                            updateChatworkRoom(room.id, {
+                              name: event.target.value,
+                            })
+                          }
+                          placeholder={`送信先 ${index + 1}`}
+                          type="text"
+                          value={room.name}
+                        />
+                      </label>
+                      <label>
+                        <span>ルームID</span>
+                        <input
+                          inputMode="numeric"
+                          onChange={(event) =>
+                            updateChatworkRoom(room.id, {
+                              roomId: event.target.value,
+                            })
+                          }
+                          placeholder="123456789"
+                          required={chatworkEnabled && room.enabled}
+                          type="text"
+                          value={room.roomId}
+                        />
+                      </label>
+                    </div>
+                    <label>
+                      <span>送信本文</span>
+                      <textarea
+                        className="chatwork-message-template"
+                        onChange={(event) =>
+                          updateChatworkRoom(room.id, {
+                            messageTemplate: event.target.value,
+                          })
+                        }
+                        required={chatworkEnabled && room.enabled}
+                        rows={8}
+                        value={room.messageTemplate}
+                      />
+                    </label>
+                  </section>
+                ))}
+              </div>
+              <button
+                className="button button-secondary"
+                onClick={addChatworkRoom}
+                type="button"
+              >
+                <Plus aria-hidden="true" />
+                送信先を追加
+              </button>
               <button className="button button-primary" disabled={savingChatwork}>
                 <MessageCircle aria-hidden="true" />
                 {savingChatwork ? "保存中..." : "連携設定を保存"}
@@ -1026,19 +1205,25 @@ export function AdminPage({ section }: { section: AdminSection }) {
                 <strong>{formatNumber(chatworkPreview?.monthlyTotal ?? 0)}</strong>
               </div>
             </div>
-            <pre className="chatwork-message-preview">
-              {chatworkPreview?.message ?? "読み込み中..."}
-            </pre>
+            <div className="chatwork-preview-list">
+              {chatworkPreviewMessages.length ? (
+                chatworkPreviewMessages.map((item) => (
+                  <div className="chatwork-preview-item" key={item.roomId}>
+                    <div className="chatwork-preview-heading">
+                      <strong>{item.roomName || `ルーム ${item.roomId}`}</strong>
+                      <span>{item.roomId}</span>
+                    </div>
+                    <pre className="chatwork-message-preview">{item.message}</pre>
+                  </div>
+                ))
+              ) : (
+                <pre className="chatwork-message-preview">読み込み中...</pre>
+              )}
+            </div>
             <div className="billing-actions">
               <button
                 className="button button-secondary"
-                disabled={
-                  sendingChatwork !== null ||
-                  loading ||
-                  !chatworkSettings?.enabled ||
-                  !chatworkSettings?.tokenConfigured ||
-                  !chatworkSettings?.roomId
-                }
+                disabled={sendingChatwork !== null || loading || !canSendChatwork}
                 onClick={() => void sendChatwork("send-test")}
                 type="button"
               >
@@ -1047,13 +1232,7 @@ export function AdminPage({ section }: { section: AdminSection }) {
               </button>
               <button
                 className="button button-primary"
-                disabled={
-                  sendingChatwork !== null ||
-                  loading ||
-                  !chatworkSettings?.enabled ||
-                  !chatworkSettings?.tokenConfigured ||
-                  !chatworkSettings?.roomId
-                }
+                disabled={sendingChatwork !== null || loading || !canSendChatwork}
                 onClick={() => void sendChatwork("send-monthly")}
                 type="button"
               >
@@ -1062,22 +1241,30 @@ export function AdminPage({ section }: { section: AdminSection }) {
               </button>
             </div>
             <div className="chatwork-last-send">
-              <span>最終送信</span>
-              <strong>
-                {chatworkLastNotification
-                  ? `${formatMonthDate(chatworkLastNotification.target_month)} / ${
-                      chatworkLastNotification.status === "sent"
-                        ? "送信済み"
-                        : "失敗"
-                    }`
-                  : "未送信"}
-              </strong>
-              {chatworkLastNotification?.sent_at ? (
-                <p>{formatDateTime(chatworkLastNotification.sent_at)}</p>
-              ) : null}
-              {chatworkLastNotification?.error_message ? (
-                <p>{chatworkLastNotification.error_message}</p>
-              ) : null}
+              <span>送信履歴</span>
+              {chatworkLastNotifications.length ? (
+                <div className="chatwork-notification-list">
+                  {chatworkLastNotifications.slice(0, 6).map((item, index) => (
+                    <div
+                      className="chatwork-notification-row"
+                      key={`${item.target_month}-${item.room_id ?? index}-${index}`}
+                    >
+                      <strong>
+                        {item.room_name ||
+                          (item.room_id ? `ルーム ${item.room_id}` : "送信先")}
+                      </strong>
+                      <p>
+                        {formatMonthDate(item.target_month)} /{" "}
+                        {item.status === "sent" ? "送信済み" : "失敗"}
+                        {item.sent_at ? ` / ${formatDateTime(item.sent_at)}` : ""}
+                      </p>
+                      {item.error_message ? <p>{item.error_message}</p> : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <strong>未送信</strong>
+              )}
             </div>
           </article>
         </section>

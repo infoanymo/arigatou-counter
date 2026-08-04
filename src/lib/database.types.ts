@@ -209,6 +209,7 @@ export type Database = {
           id: number;
           api_token: string | null;
           room_id: string | null;
+          rooms: Json;
           enabled: boolean;
           updated_by: string | null;
           created_at: string;
@@ -218,6 +219,7 @@ export type Database = {
           id?: number;
           api_token?: string | null;
           room_id?: string | null;
+          rooms?: Json;
           enabled?: boolean;
           updated_by?: string | null;
           created_at?: string;
@@ -226,6 +228,7 @@ export type Database = {
         Update: {
           api_token?: string | null;
           room_id?: string | null;
+          rooms?: Json;
           enabled?: boolean;
           updated_by?: string | null;
           updated_at?: string;
@@ -244,6 +247,8 @@ export type Database = {
         Row: {
           id: string;
           target_month: string;
+          room_id: string;
+          room_name: string | null;
           status: "sent" | "failed";
           cumulative_count: number | null;
           monthly_count: number | null;
@@ -259,6 +264,8 @@ export type Database = {
         Insert: {
           id?: string;
           target_month: string;
+          room_id?: string;
+          room_name?: string | null;
           status: "sent" | "failed";
           cumulative_count?: number | null;
           monthly_count?: number | null;
@@ -273,6 +280,8 @@ export type Database = {
         };
         Update: {
           target_month?: string;
+          room_id?: string;
+          room_name?: string | null;
           status?: "sent" | "failed";
           cumulative_count?: number | null;
           monthly_count?: number | null;

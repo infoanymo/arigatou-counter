@@ -6,14 +6,25 @@ type ChatworkSettings = {
   id: number;
   api_token: string | null;
   room_id: string | null;
+  rooms: unknown;
   enabled: boolean;
   updated_at: string;
   updated_by: string | null;
 };
 
+type ChatworkRoom = {
+  id: string;
+  name: string;
+  roomId: string;
+  messageTemplate: string;
+  enabled: boolean;
+};
+
 type ChatworkNotification = {
   id: string;
   target_month: string;
+  room_id: string | null;
+  room_name: string | null;
   status: "sent" | "failed";
   cumulative_count: number | null;
   monthly_count: number | null;
@@ -33,6 +44,12 @@ type ReportSummary = {
   monthlyTotal: number;
 };
 
+type ChatworkMessagePreview = {
+  roomId: string;
+  roomName: string;
+  message: string;
+};
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -40,6 +57,12 @@ const corsHeaders = {
 };
 
 const jstOffsetMs = 9 * 60 * 60 * 1000;
+const defaultMessageTemplate = `[toall]
+[info][title]内容：ありがとう集計[/title]
+担当部署：CS/CX
+【通知内容】
+累計ありがとう：{{cumulativeTotal}}
+{{targetMonth}}のありがとう：{{monthlyTotal}}[/info]`;
 
 class HttpError extends Error {
   status: number;
@@ -73,6 +96,87 @@ function cleanRoomId(value: unknown) {
   if (/^\d+$/.test(text)) return text;
 
   return "";
+}
+
+function cleanRoomName(value: unknown, roomId: string) {
+  const text = cleanText(value);
+  return text || `ルーム ${roomId}`;
+}
+
+function cleanMessageTemplate(value: unknown) {
+  return cleanText(value) || defaultMessageTemplate;
+}
+
+function roomValue(
+  raw: Record<string, unknown>,
+  camelKey: string,
+  snakeKey: string,
+) {
+  return raw[camelKey] ?? raw[snakeKey];
+}
+
+function normalizeRoomRecord(rawValue: unknown, index: number) {
+  if (!rawValue || typeof rawValue !== "object") return null;
+
+  const raw = rawValue as Record<string, unknown>;
+  const roomId = cleanRoomId(roomValue(raw, "roomId", "room_id"));
+  if (!roomId) return null;
+
+  return {
+    id: cleanText(raw.id) || `${roomId}-${index}`,
+    name: cleanRoomName(raw.name, roomId),
+    roomId,
+    messageTemplate: cleanMessageTemplate(
+      roomValue(raw, "messageTemplate", "message_template"),
+    ),
+    enabled: raw.enabled !== false,
+  };
+}
+
+function normalizeRooms(value: unknown, fallbackRoomId?: unknown) {
+  const rooms: ChatworkRoom[] = [];
+
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => {
+      const room = normalizeRoomRecord(item, index);
+      if (room) rooms.push(room);
+    });
+  }
+
+  if (!rooms.length) {
+    const roomId = cleanRoomId(fallbackRoomId);
+    if (roomId) {
+      rooms.push({
+        id: roomId,
+        name: cleanRoomName("", roomId),
+        roomId,
+        messageTemplate: defaultMessageTemplate,
+        enabled: true,
+      });
+    }
+  }
+
+  return rooms;
+}
+
+function duplicateRoomIds(rooms: ChatworkRoom[]) {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+
+  rooms.forEach((room) => {
+    if (seen.has(room.roomId)) duplicates.add(room.roomId);
+    seen.add(room.roomId);
+  });
+
+  return [...duplicates];
+}
+
+function roomsForSettings(settings: ChatworkSettings | null) {
+  return normalizeRooms(settings?.rooms, settings?.room_id);
+}
+
+function enabledRoomsForSettings(settings: ChatworkSettings | null) {
+  return roomsForSettings(settings).filter((room) => room.enabled);
 }
 
 function getAdminKey() {
@@ -142,22 +246,24 @@ async function loadSettings(admin: SupabaseAdmin) {
   return (data ?? null) as ChatworkSettings | null;
 }
 
-async function loadLastNotification(admin: SupabaseAdmin) {
+async function loadRecentNotifications(admin: SupabaseAdmin) {
   const { data, error } = await admin
     .from("chatwork_monthly_notifications")
     .select("*")
     .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(12);
 
   if (error) throw new HttpError(error.message, 400);
-  return (data ?? null) as ChatworkNotification | null;
+  return (data ?? []) as ChatworkNotification[];
 }
 
 function publicSettings(settings: ChatworkSettings | null) {
+  const rooms = roomsForSettings(settings);
+
   return {
     enabled: settings?.enabled ?? false,
-    roomId: settings?.room_id ?? "",
+    roomId: rooms[0]?.roomId ?? settings?.room_id ?? "",
+    rooms,
     tokenConfigured: Boolean(settings?.api_token),
     updatedAt: settings?.updated_at ?? null,
   };
@@ -255,27 +361,50 @@ function formatCount(value: number) {
   return new Intl.NumberFormat("ja-JP").format(value);
 }
 
-function buildMessage(summary: ReportSummary) {
-  return `[toall]
-[info][title]内容：ありがとう集計[/title]
-担当部署：CS/CX
-【通知内容】
-累計ありがとう：${formatCount(summary.cumulativeTotal)}
-${summary.targetMonthLabel}のありがとう：${formatCount(summary.monthlyTotal)}[/info]`;
+function buildMessage(summary: ReportSummary, template = defaultMessageTemplate) {
+  const replacements: Record<string, string> = {
+    cumulativeTotal: formatCount(summary.cumulativeTotal),
+    monthlyTotal: formatCount(summary.monthlyTotal),
+    targetMonth: summary.targetMonthLabel,
+    targetMonthLabel: summary.targetMonthLabel,
+    targetMonthStart: summary.targetMonth,
+    累計ありがとう: formatCount(summary.cumulativeTotal),
+    月のありがとう: formatCount(summary.monthlyTotal),
+    対象月: summary.targetMonthLabel,
+  };
+
+  return template.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_, key: string) => {
+    return replacements[key] ?? "";
+  });
 }
 
-async function postChatworkMessage(settings: ChatworkSettings, message: string) {
-  if (!settings.api_token || !settings.room_id) {
+function buildRoomMessages(
+  summary: ReportSummary,
+  rooms: ChatworkRoom[],
+): ChatworkMessagePreview[] {
+  return rooms.map((room) => ({
+    roomId: room.roomId,
+    roomName: room.name,
+    message: buildMessage(summary, room.messageTemplate),
+  }));
+}
+
+async function postChatworkMessage(
+  apiToken: string | null,
+  roomId: string,
+  message: string,
+) {
+  if (!apiToken || !roomId) {
     throw new HttpError("Chatwork API token and room ID are required.", 400);
   }
 
   const response = await fetch(
-    `https://api.chatwork.com/v2/rooms/${settings.room_id}/messages`,
+    `https://api.chatwork.com/v2/rooms/${roomId}/messages`,
     {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        "x-chatworktoken": settings.api_token,
+        "x-chatworktoken": apiToken,
       },
       body: new URLSearchParams({
         body: message,
@@ -305,19 +434,26 @@ async function postChatworkMessage(settings: ChatworkSettings, message: string) 
 }
 
 async function settingsResponse(admin: SupabaseAdmin, targetMonthValue?: string) {
-  const [settings, preview, lastNotification] = await Promise.all([
+  const [settings, preview, lastNotifications] = await Promise.all([
     loadSettings(admin),
     buildReportSummary(admin, targetMonthValue),
-    loadLastNotification(admin),
+    loadRecentNotifications(admin),
   ]);
+  const rooms = enabledRoomsForSettings(settings);
+  const messages = buildRoomMessages(
+    preview,
+    rooms.length ? rooms : roomsForSettings(settings),
+  );
 
   return {
     settings: publicSettings(settings),
     preview: {
       ...preview,
-      message: buildMessage(preview),
+      message: messages[0]?.message ?? buildMessage(preview),
+      messages,
     },
-    lastNotification,
+    lastNotification: lastNotifications[0] ?? null,
+    lastNotifications,
   };
 }
 
@@ -328,7 +464,10 @@ async function saveSettings(
 ) {
   const current = await loadSettings(admin);
   const apiToken = cleanText(body.apiToken);
-  const roomId = cleanRoomId(body.roomId);
+  const rooms = normalizeRooms(body.rooms, body.roomId);
+  const enabledRooms = rooms.filter((room) => room.enabled);
+  const duplicates = duplicateRoomIds(rooms);
+  const roomId = enabledRooms[0]?.roomId ?? rooms[0]?.roomId ?? "";
   const enabled = body.enabled === true;
   const nextToken = body.clearToken === true ? null : apiToken || current?.api_token || null;
 
@@ -336,8 +475,12 @@ async function saveSettings(
     throw new HttpError("Chatwork API token is required.", 400);
   }
 
-  if (enabled && !roomId) {
-    throw new HttpError("Valid Chatwork room ID is required.", 400);
+  if (duplicates.length) {
+    throw new HttpError(`Chatwork room ID is duplicated: ${duplicates.join(", ")}`, 400);
+  }
+
+  if (enabled && !enabledRooms.length) {
+    throw new HttpError("At least one valid Chatwork room is required.", 400);
   }
 
   const { data, error } = await admin
@@ -347,6 +490,7 @@ async function saveSettings(
         id: 1,
         api_token: nextToken,
         room_id: roomId || null,
+        rooms,
         enabled,
         updated_by: callerId,
       },
@@ -364,30 +508,52 @@ async function saveSettings(
 
 async function ensureSendableSettings(admin: SupabaseAdmin) {
   const settings = await loadSettings(admin);
+  const rooms = enabledRoomsForSettings(settings);
 
   if (!settings?.enabled) {
     throw new HttpError("Chatwork連携が無効です。", 400);
   }
 
-  if (!settings.api_token || !settings.room_id) {
+  if (!settings.api_token || !rooms.length) {
     throw new HttpError("Chatwork API token and room ID are required.", 400);
   }
 
-  return settings;
+  return { settings, rooms };
 }
 
 async function sendTest(admin: SupabaseAdmin, targetMonthValue?: string) {
-  const settings = await ensureSendableSettings(admin);
+  const { settings, rooms } = await ensureSendableSettings(admin);
   const summary = await buildReportSummary(admin, targetMonthValue);
-  const message = buildMessage(summary);
-  const chatworkResponse = await postChatworkMessage(settings, message);
+  const messages = buildRoomMessages(summary, rooms);
+  const messageIds: {
+    roomId: string;
+    roomName: string;
+    messageId: string | null;
+  }[] = [];
+
+  for (const item of messages) {
+    const chatworkResponse = await postChatworkMessage(
+      settings.api_token,
+      item.roomId,
+      item.message,
+    );
+
+    messageIds.push({
+      roomId: item.roomId,
+      roomName: item.roomName,
+      messageId: chatworkResponse?.message_id
+        ? String(chatworkResponse.message_id)
+        : null,
+    });
+  }
 
   return {
     ok: true,
-    messageId: chatworkResponse?.message_id ? String(chatworkResponse.message_id) : null,
+    messageIds,
     preview: {
       ...summary,
-      message,
+      message: messages[0]?.message ?? buildMessage(summary),
+      messages,
     },
   };
 }
@@ -400,92 +566,112 @@ async function sendMonthly(
     triggeredBy: "admin" | "cron";
   },
 ) {
-  const settings = await ensureSendableSettings(admin);
+  const { settings, rooms } = await ensureSendableSettings(admin);
   const summary = await buildReportSummary(admin, options.targetMonth);
-  const message = buildMessage(summary);
+  const messages = buildRoomMessages(summary, rooms);
+  const sentNotifications: unknown[] = [];
+  const skippedNotifications: unknown[] = [];
+  const failures: string[] = [];
 
-  if (!options.force) {
+  for (const item of messages) {
     const { data: existing, error: existingError } = await admin
       .from("chatwork_monthly_notifications")
       .select("*")
       .eq("target_month", summary.targetMonth)
+      .eq("room_id", item.roomId)
       .eq("status", "sent")
       .maybeSingle();
 
     if (existingError) throw new HttpError(existingError.message, 400);
 
-    if (existing) {
-      return {
-        ok: true,
-        skipped: true,
-        reason: "already_sent",
-        notification: existing,
-        preview: {
-          ...summary,
-          message,
+    if (!options.force && existing) {
+      skippedNotifications.push(existing);
+      continue;
+    }
+
+    try {
+      const chatworkResponse = await postChatworkMessage(
+        settings.api_token,
+        item.roomId,
+        item.message,
+      );
+      const messageId = chatworkResponse?.message_id
+        ? String(chatworkResponse.message_id)
+        : null;
+
+      const { data, error } = await admin
+        .from("chatwork_monthly_notifications")
+        .upsert(
+          {
+            target_month: summary.targetMonth,
+            room_id: item.roomId,
+            room_name: item.roomName,
+            status: "sent",
+            cumulative_count: summary.cumulativeTotal,
+            monthly_count: summary.monthlyTotal,
+            message_body: item.message,
+            chatwork_message_id: messageId,
+            response: chatworkResponse,
+            error_message: null,
+            sent_at: new Date().toISOString(),
+            triggered_by: options.triggeredBy,
+          },
+          { onConflict: "target_month,room_id" },
+        )
+        .select("*")
+        .single();
+
+      if (error) throw new HttpError(error.message, 400);
+
+      sentNotifications.push(data);
+    } catch (error) {
+      const messageText =
+        error instanceof Error ? error.message : "Chatwork送信に失敗しました。";
+
+      await admin.from("chatwork_monthly_notifications").upsert(
+        {
+          target_month: summary.targetMonth,
+          room_id: item.roomId,
+          room_name: item.roomName,
+          status: "failed",
+          cumulative_count: summary.cumulativeTotal,
+          monthly_count: summary.monthlyTotal,
+          message_body: item.message,
+          chatwork_message_id: null,
+          response: null,
+          error_message: messageText,
+          sent_at: null,
+          triggered_by: options.triggeredBy,
         },
-      };
+        { onConflict: "target_month,room_id" },
+      );
+
+      failures.push(`${item.roomName}: ${messageText}`);
     }
   }
 
-  try {
-    const chatworkResponse = await postChatworkMessage(settings, message);
-    const messageId = chatworkResponse?.message_id
-      ? String(chatworkResponse.message_id)
-      : null;
-
-    const { data, error } = await admin
-      .from("chatwork_monthly_notifications")
-      .upsert(
-        {
-          target_month: summary.targetMonth,
-          status: "sent",
-          cumulative_count: summary.cumulativeTotal,
-          monthly_count: summary.monthlyTotal,
-          message_body: message,
-          chatwork_message_id: messageId,
-          response: chatworkResponse,
-          error_message: null,
-          sent_at: new Date().toISOString(),
-          triggered_by: options.triggeredBy,
-        },
-        { onConflict: "target_month" },
-      )
-      .select("*")
-      .single();
-
-    if (error) throw new HttpError(error.message, 400);
-
-    return {
-      ok: true,
-      notification: data,
-      preview: {
-        ...summary,
-        message,
-      },
-    };
-  } catch (error) {
-    const messageText =
-      error instanceof Error ? error.message : "Chatwork送信に失敗しました。";
-
-    await admin.from("chatwork_monthly_notifications").upsert(
-      {
-        target_month: summary.targetMonth,
-        status: "failed",
-        cumulative_count: summary.cumulativeTotal,
-        monthly_count: summary.monthlyTotal,
-        message_body: message,
-        chatwork_message_id: null,
-        response: null,
-        error_message: messageText,
-        sent_at: null,
-        triggered_by: options.triggeredBy,
-      },
-      { onConflict: "target_month" },
+  if (failures.length) {
+    throw new HttpError(
+      `一部のChatwork送信に失敗しました。${failures.join(" / ")}`,
+      502,
     );
-
-    throw error;
   }
+
+  return {
+    ok: true,
+    skipped: sentNotifications.length === 0 && skippedNotifications.length > 0,
+    reason:
+      sentNotifications.length === 0 && skippedNotifications.length > 0
+        ? "already_sent"
+        : undefined,
+    notifications: sentNotifications,
+    skippedNotifications,
+    preview: {
+      ...summary,
+      message: messages[0]?.message ?? buildMessage(summary),
+      messages,
+    },
+  };
 }
 
 Deno.serve(async (req) => {
