@@ -680,7 +680,7 @@ textarea {
 .hero-band {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.8fr) 180px;
+  grid-template-columns: minmax(220px, 1fr) minmax(360px, auto) 166px;
   align-items: center;
   gap: 24px;
   overflow: hidden;
@@ -778,7 +778,7 @@ textarea {
   display: inline-flex;
   position: relative;
   min-height: 76px;
-  min-width: min(320px, 100%);
+  min-width: min(360px, 100%);
   align-items: center;
   justify-content: center;
   gap: 12px;
@@ -806,6 +806,10 @@ textarea {
     box-shadow 150ms ease,
     background 150ms ease,
     opacity 150ms ease;
+}
+
+.thank-you-button span {
+  white-space: nowrap;
 }
 
 .thank-you-button::before {
@@ -2243,6 +2247,19 @@ td select {
 
   .progress-ring span {
     font-size: 1.45rem;
+  }
+
+  .thank-you-button {
+    min-height: 66px;
+    gap: 8px;
+    padding: 0 12px;
+    font-size: 0.92rem;
+  }
+
+  .thank-you-button svg {
+    width: 18px;
+    height: 18px;
+    padding: 7px;
   }
 
   .form-grid {
