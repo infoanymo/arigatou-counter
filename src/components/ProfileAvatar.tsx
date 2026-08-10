@@ -1,4 +1,5 @@
 import { UserRound } from "lucide-react";
+import { useEffect, useState } from "react";
 
 type ProfileAvatarProps = {
   name: string;
@@ -23,14 +24,20 @@ export function ProfileAvatar({
   avatarScale,
 }: ProfileAvatarProps) {
   const className = `avatar avatar-${size}`;
+  const [imageFailed, setImageFailed] = useState(false);
 
-  if (src) {
+  useEffect(() => {
+    setImageFailed(false);
+  }, [src]);
+
+  if (src && !imageFailed) {
     return (
       <span className={className} aria-hidden="true">
         <img
           className="avatar-image"
           src={src}
           alt=""
+          onError={() => setImageFailed(true)}
           style={{ "--avatar-scale": normalizeScale(avatarScale) } as React.CSSProperties}
         />
       </span>

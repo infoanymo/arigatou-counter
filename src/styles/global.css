@@ -1194,6 +1194,20 @@ textarea {
   border-radius: 8px;
   background: white;
   box-shadow: 0 10px 24px rgba(0, 45, 85, 0.16);
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity 140ms ease, transform 140ms ease, visibility 140ms ease;
+}
+
+.reaction-summary-wrap:hover .reaction-people-popover,
+.reaction-summary-wrap:focus-within .reaction-people-popover,
+.reaction-summary-wrap.is-open .reaction-people-popover {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
 }
 
 .reaction-people-popover > strong {

@@ -1010,7 +1010,12 @@ export function DashboardPage() {
                       const people =
                         likesByEvent[event.id]?.reactionUsers[option.key] ?? [];
                       return (
-                        <div className="reaction-summary-wrap" key={option.key}>
+                        <div
+                          className={`reaction-summary-wrap ${
+                            reactionPeopleKey === peopleKey ? "is-open" : ""
+                          }`}
+                          key={option.key}
+                        >
                           <button
                             aria-expanded={reactionPeopleKey === peopleKey}
                             aria-label={`${option.label}を押した人を見る`}
@@ -1028,33 +1033,31 @@ export function DashboardPage() {
                             <span>{option.emoji}</span>
                             {formatNumber(likesByEvent[event.id]?.reactionCounts[option.key] ?? 0)}
                           </button>
-                          {reactionPeopleKey === peopleKey ? (
-                            <div className="reaction-people-popover">
-                              <strong>
-                                {option.emoji} {option.label}を押した人
-                              </strong>
-                              <div className="reaction-people-list">
-                                {people.map((person, index) => {
-                                  const personName =
-                                    person.display_name || person.email || "メンバー";
-                                  return (
-                                    <div
-                                      className="reaction-person"
-                                      key={`${person.email ?? personName}-${index}`}
-                                    >
-                                      <ProfileAvatar
-                                        name={personName}
-                                        src={person.avatar_url}
-                                        avatarScale={person.avatar_scale}
-                                        size="sm"
-                                      />
-                                      <span>{personName}</span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
+                          <div className="reaction-people-popover" role="tooltip">
+                            <strong>
+                              {option.emoji} {option.label}を押した人
+                            </strong>
+                            <div className="reaction-people-list">
+                              {people.map((person, index) => {
+                                const personName =
+                                  person.display_name || person.email || "メンバー";
+                                return (
+                                  <div
+                                    className="reaction-person"
+                                    key={`${person.email ?? personName}-${index}`}
+                                  >
+                                    <ProfileAvatar
+                                      name={personName}
+                                      src={person.avatar_url}
+                                      avatarScale={person.avatar_scale}
+                                      size="sm"
+                                    />
+                                    <span>{personName}</span>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          ) : null}
+                          </div>
                         </div>
                       );
                     })}
