@@ -375,9 +375,19 @@ export function DashboardPage() {
       }
     }
 
-    return [...result.values()]
+    const sorted = [...result.values()]
       .sort((a, b) => b.count - a.count || b.lastAt.localeCompare(a.lastAt))
       .slice(0, 10);
+
+    let previousCount: number | undefined;
+    let previousRank = 0;
+
+    return sorted.map((entry, index) => {
+      const rank = entry.count === previousCount ? previousRank : index + 1;
+      previousCount = entry.count;
+      previousRank = rank;
+      return { ...entry, rank };
+    });
   }, [events]);
 
   function runCelebration() {
@@ -600,9 +610,11 @@ export function DashboardPage() {
           </div>
           <ol className="ranking-list">
             {ranking.length ? (
-              ranking.map((entry, index) => (
+              ranking.map((entry) => (
                 <li key={entry.userId}>
-                  <span className="rank-number">{formatNumber(index + 1)}</span>
+                  <span className={`rank-number rank-${entry.rank}`}>
+                    {formatNumber(entry.rank)}
+                  </span>
                   <ProfileAvatar
                     name={entry.name}
                     src={entry.avatarUrl}

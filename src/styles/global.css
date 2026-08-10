@@ -990,19 +990,19 @@ textarea {
   line-height: 1;
 }
 
-.ranking-list li:nth-child(1) .rank-number {
+.rank-number.rank-1 {
   border-color: rgba(184, 134, 11, 0.28);
   background: linear-gradient(135deg, #fff6c8 0%, #f4c542 100%);
   color: #5c4100;
 }
 
-.ranking-list li:nth-child(2) .rank-number {
+.rank-number.rank-2 {
   border-color: rgba(104, 122, 139, 0.28);
   background: linear-gradient(135deg, #f8fafc 0%, #c9d3df 100%);
   color: #45556b;
 }
 
-.ranking-list li:nth-child(3) .rank-number {
+.rank-number.rank-3 {
   border-color: rgba(145, 84, 31, 0.28);
   background: linear-gradient(135deg, #ffe1bd 0%, #b87333 100%);
   color: #5c2f0d;
