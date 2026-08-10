@@ -1098,6 +1098,54 @@ textarea {
   padding: 0 10px;
 }
 
+.reaction-action-wrap {
+  position: relative;
+}
+
+.reaction-current {
+  display: inline-flex;
+  min-width: 15px;
+  justify-content: center;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.reaction-picker {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 6px);
+  left: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  width: max-content;
+  max-width: min(300px, calc(100vw - 48px));
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: white;
+  box-shadow: 0 10px 24px rgba(0, 45, 85, 0.16);
+}
+
+.reaction-picker button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  font-size: 1.05rem;
+  transition: background 140ms ease, transform 140ms ease;
+}
+
+.reaction-picker button:hover,
+.reaction-picker button.active {
+  background: #edf5fb;
+  transform: scale(1.1);
+}
+
 .mini-action {
   border: 1px solid var(--line);
   cursor: pointer;
@@ -1155,6 +1203,60 @@ textarea {
 .comment-form input {
   min-height: 38px;
   background: white;
+}
+
+.community-post-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid rgba(0, 45, 85, 0.12);
+  border-radius: 8px;
+  background: #f7fafc;
+}
+
+.community-post-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.community-post-heading > div {
+  display: grid;
+  gap: 2px;
+}
+
+.community-post-heading span,
+.community-post-footer span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.community-post-form textarea {
+  min-height: 72px;
+  resize: vertical;
+  background: white;
+}
+
+.community-post-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.community-post-footer .button {
+  min-height: 36px;
+  padding: 0 14px;
+}
+
+.community-post-body {
+  margin: 0 0 0 46px;
+  color: #12243a;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .page-panel {

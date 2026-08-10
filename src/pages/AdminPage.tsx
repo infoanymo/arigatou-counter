@@ -475,7 +475,7 @@ export function AdminPage({ section }: { section: AdminSection }) {
       let query = client
         .from("thank_you_events")
         .select(
-          "id, period_id, user_id, created_at, profiles:profiles!thank_you_events_user_id_fkey(display_name,email,company_name,avatar_url,avatar_scale)",
+          "id, period_id, user_id, kind, message, created_at, profiles:profiles!thank_you_events_user_id_fkey(display_name,email,company_name,avatar_url,avatar_scale)",
         )
         .eq("period_id", periodId)
         .order("created_at", { ascending: false })
@@ -543,7 +543,8 @@ export function AdminPage({ section }: { section: AdminSection }) {
     const { count, error: countError } = await client
       .from("thank_you_events")
       .select("*", { count: "exact", head: true })
-      .eq("period_id", periodId);
+      .eq("period_id", periodId)
+      .eq("kind", "thank_you");
 
     if (countError) {
       setMessage("ありがとう件数を読み込めませんでした。");

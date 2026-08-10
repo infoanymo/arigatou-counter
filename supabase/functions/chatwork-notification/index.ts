@@ -311,6 +311,8 @@ async function countEvents(
     .from("thank_you_events")
     .select("id", { count: "exact", head: true });
 
+  query = query.eq("kind", "thank_you");
+
   if (range.from) query = query.gte("created_at", range.from);
   if (range.to) query = query.lt("created_at", range.to);
 

@@ -49,15 +49,58 @@ create table if not exists public.thank_you_events (
   id uuid primary key default gen_random_uuid(),
   period_id uuid not null references public.periods (id) on delete restrict,
   user_id uuid not null default auth.uid() references public.profiles (id) on delete restrict,
+  kind text not null default 'thank_you' check (kind in ('thank_you', 'community_post')),
+  message text,
   created_at timestamptz not null default now()
 );
+
+alter table public.thank_you_events
+  add column if not exists kind text not null default 'thank_you',
+  add column if not exists message text;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'public.thank_you_events'::regclass
+      and conname = 'thank_you_events_kind_message_check'
+  ) then
+    alter table public.thank_you_events
+      add constraint thank_you_events_kind_message_check
+      check (
+        (kind = 'thank_you' and message is null)
+        or (kind = 'community_post' and char_length(btrim(message)) between 1 and 500)
+      );
+  end if;
+end;
+$$;
 
 create table if not exists public.thank_you_likes (
   event_id uuid not null references public.thank_you_events (id) on delete cascade,
   user_id uuid not null default auth.uid() references public.profiles (id) on delete cascade,
+  reaction text not null default 'like',
   created_at timestamptz not null default now(),
   primary key (event_id, user_id)
 );
+
+alter table public.thank_you_likes
+  add column if not exists reaction text not null default 'like';
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'public.thank_you_likes'::regclass
+      and conname = 'thank_you_likes_reaction_check'
+  ) then
+    alter table public.thank_you_likes
+      add constraint thank_you_likes_reaction_check
+      check (reaction in ('like', 'love', 'clap', 'celebrate', 'thanks', 'strong', 'sparkle', 'heart_eyes'));
+  end if;
+end;
+$$;
 
 create table if not exists public.thank_you_comments (
   id uuid primary key default gen_random_uuid(),
@@ -199,6 +242,8 @@ create index if not exists thank_you_events_period_user_idx
   on public.thank_you_events (period_id, user_id);
 create index if not exists thank_you_events_user_idx
   on public.thank_you_events (user_id);
+create index if not exists thank_you_events_kind_idx
+  on public.thank_you_events (period_id, kind, created_at desc);
 create index if not exists thank_you_likes_user_idx
   on public.thank_you_likes (user_id);
 create index if not exists thank_you_comments_event_created_idx

@@ -94,8 +94,9 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
       client
         .from("thank_you_events")
         .select(
-          "id,period_id,user_id,created_at,profiles:profiles!thank_you_events_user_id_fkey(display_name,email,company_name,avatar_url,avatar_scale)",
+          "id,period_id,user_id,kind,message,created_at,profiles:profiles!thank_you_events_user_id_fkey(display_name,email,company_name,avatar_url,avatar_scale)",
         )
+        .eq("kind", "thank_you")
         .order("created_at", { ascending: false })
         .limit(20000)
         .returns<EventWithProfile[]>(),
