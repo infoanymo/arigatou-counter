@@ -93,7 +93,14 @@ export type Database = {
           message?: string | null;
           created_at?: string;
         };
-        Update: never;
+        Update: {
+          id?: string;
+          period_id?: string;
+          user_id?: string;
+          kind?: "thank_you" | "community_post";
+          message?: string | null;
+          created_at?: string;
+        };
         Relationships: [
           {
             foreignKeyName: "thank_you_events_period_id_fkey";
@@ -124,7 +131,12 @@ export type Database = {
           reaction?: "like" | "love" | "clap" | "celebrate" | "thanks" | "strong" | "sparkle" | "heart_eyes";
           created_at?: string;
         };
-        Update: never;
+        Update: {
+          event_id?: string;
+          user_id?: string;
+          reaction?: "like" | "love" | "clap" | "celebrate" | "thanks" | "strong" | "sparkle" | "heart_eyes";
+          created_at?: string;
+        };
         Relationships: [
           {
             foreignKeyName: "thank_you_likes_event_id_fkey";

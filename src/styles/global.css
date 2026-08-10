@@ -1102,6 +1102,10 @@ textarea {
   position: relative;
 }
 
+.reaction-action-wrap.is-open {
+  z-index: 20;
+}
+
 .reaction-current {
   display: inline-flex;
   min-width: 15px;
@@ -1125,6 +1129,7 @@ textarea {
   border-radius: 999px;
   background: white;
   box-shadow: 0 10px 24px rgba(0, 45, 85, 0.16);
+  pointer-events: auto;
 }
 
 .reaction-picker button {
@@ -1149,6 +1154,32 @@ textarea {
 .mini-action {
   border: 1px solid var(--line);
   cursor: pointer;
+}
+
+.mini-action svg {
+  width: 14px;
+  height: 14px;
+}
+
+.mini-action-primary {
+  border-color: var(--teal);
+  color: white;
+  background: var(--teal);
+}
+
+.mini-action-primary:hover {
+  color: white;
+  background: var(--teal-dark);
+}
+
+.mini-action-danger {
+  color: var(--danger);
+}
+
+.mini-action-danger:hover {
+  border-color: rgba(180, 35, 24, 0.25);
+  color: white;
+  background: var(--danger);
 }
 
 .mini-action.active,
@@ -1257,6 +1288,44 @@ textarea {
   line-height: 1.7;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+.community-post-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: 46px;
+}
+
+.community-post-edit-form {
+  display: grid;
+  gap: 10px;
+  margin-left: 46px;
+}
+
+.community-post-edit-form textarea {
+  min-height: 84px;
+  resize: vertical;
+  background: white;
+}
+
+.community-post-edit-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.community-post-edit-footer > span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.community-post-edit-footer > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .page-panel {

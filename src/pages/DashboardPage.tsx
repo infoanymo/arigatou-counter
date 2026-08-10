@@ -1,15 +1,19 @@
 import confetti from "canvas-confetti";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Check,
   Crown,
   HeartHandshake,
   MessageCircle,
+  Pencil,
   Radio,
   Send,
   Sparkles,
   Target,
   ThumbsUp,
+  Trash2,
   Trophy,
+  X,
 } from "lucide-react";
 import type {
   Period,
@@ -126,10 +130,14 @@ export function DashboardPage() {
   >({});
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [postDraft, setPostDraft] = useState("");
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [editPostDraft, setEditPostDraft] = useState("");
   const [reactionPickerId, setReactionPickerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [savingPost, setSavingPost] = useState(false);
+  const [savingEditId, setSavingEditId] = useState<string | null>(null);
+  const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [savingCommentId, setSavingCommentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [realtimeStatus, setRealtimeStatus] =
@@ -523,6 +531,74 @@ export function DashboardPage() {
     setReactionPickerId(null);
   }
 
+  function startEditingPost(post: EventWithProfile) {
+    if (post.kind !== "community_post" || post.user_id !== user?.id) return;
+    setEditingPostId(post.id);
+    setEditPostDraft(post.message ?? "");
+    setReactionPickerId(null);
+  }
+
+  function cancelEditingPost() {
+    setEditingPostId(null);
+    setEditPostDraft("");
+  }
+
+  async function handleCommunityPostUpdate(
+    event: React.FormEvent<HTMLFormElement>,
+    postId: string,
+  ) {
+    event.preventDefault();
+    const body = editPostDraft.trim();
+    if (!body || savingEditId) return;
+
+    const client = getSupabase();
+    setSavingEditId(postId);
+    setError(null);
+
+    const { error: updateError } = await client
+      .from("thank_you_events")
+      .update({ message: body })
+      .eq("id", postId)
+      .eq("user_id", user?.id ?? "")
+      .eq("kind", "community_post");
+
+    if (updateError) {
+      setError("全体投稿を更新できませんでした。権限を確認してください。");
+    } else {
+      cancelEditingPost();
+      if (period) await loadEvents(period.id);
+    }
+
+    setSavingEditId(null);
+  }
+
+  async function handleCommunityPostDelete(post: EventWithProfile) {
+    if (post.kind !== "community_post" || post.user_id !== user?.id || deletingPostId) {
+      return;
+    }
+    if (!window.confirm("この全体投稿を削除しますか？")) return;
+
+    const client = getSupabase();
+    setDeletingPostId(post.id);
+    setError(null);
+
+    const { error: deleteError } = await client
+      .from("thank_you_events")
+      .delete()
+      .eq("id", post.id)
+      .eq("user_id", user?.id ?? "")
+      .eq("kind", "community_post");
+
+    if (deleteError) {
+      setError("全体投稿を削除できませんでした。権限を確認してください。");
+    } else {
+      if (editingPostId === post.id) cancelEditingPost();
+      if (period) await loadEvents(period.id);
+    }
+
+    setDeletingPostId(null);
+  }
+
   async function handleCommunityPostSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const body = postDraft.trim();
@@ -775,11 +851,76 @@ export function DashboardPage() {
                   </div>
                 </div>
                 {event.kind === "community_post" ? (
-                  <p className="community-post-body">{event.message}</p>
+                  event.id === editingPostId ? (
+                    <form
+                      className="community-post-edit-form"
+                      onSubmit={(formEvent) =>
+                        void handleCommunityPostUpdate(formEvent, event.id)
+                      }
+                    >
+                      <textarea
+                        maxLength={500}
+                        onChange={(inputEvent) => setEditPostDraft(inputEvent.target.value)}
+                        value={editPostDraft}
+                        autoFocus
+                      />
+                      <div className="community-post-edit-footer">
+                        <span>{formatNumber(editPostDraft.length)} / 500</span>
+                        <div>
+                          <button
+                            className="mini-action"
+                            onClick={cancelEditingPost}
+                            type="button"
+                          >
+                            <X aria-hidden="true" />
+                            キャンセル
+                          </button>
+                          <button
+                            className="mini-action mini-action-primary"
+                            disabled={!editPostDraft.trim() || savingEditId === event.id}
+                            type="submit"
+                          >
+                            <Check aria-hidden="true" />
+                            {savingEditId === event.id ? "保存中..." : "保存"}
+                          </button>
+                        </div>
+                      </div>
+                    </form>
+                  ) : (
+                    <>
+                      <p className="community-post-body">{event.message}</p>
+                      {event.user_id === user?.id ? (
+                        <div className="community-post-actions">
+                          <button
+                            className="mini-action"
+                            onClick={() => startEditingPost(event)}
+                            type="button"
+                          >
+                            <Pencil aria-hidden="true" />
+                            編集
+                          </button>
+                          <button
+                            className="mini-action mini-action-danger"
+                            disabled={deletingPostId === event.id}
+                            onClick={() => void handleCommunityPostDelete(event)}
+                            type="button"
+                          >
+                            <Trash2 aria-hidden="true" />
+                            {deletingPostId === event.id ? "削除中..." : "削除"}
+                          </button>
+                        </div>
+                      ) : null}
+                    </>
+                  )
                 ) : null}
                 <div className="interaction-row">
-                  <div className="reaction-action-wrap">
+                  <div
+                    className={`reaction-action-wrap ${
+                      reactionPickerId === event.id ? "is-open" : ""
+                    }`}
+                  >
                     <button
+                      aria-label="リアクションを選択"
                       aria-expanded={reactionPickerId === event.id}
                       aria-haspopup="true"
                       className={`mini-action ${

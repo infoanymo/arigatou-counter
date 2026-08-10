@@ -442,6 +442,33 @@ with check (
   )
 );
 
+drop policy if exists "thank_you_events_update_own_community_posts" on public.thank_you_events;
+create policy "thank_you_events_update_own_community_posts"
+on public.thank_you_events
+for update
+to authenticated
+using (
+  user_id = (select auth.uid())
+  and kind = 'community_post'
+  and app_private.current_user_is_active()
+)
+with check (
+  user_id = (select auth.uid())
+  and kind = 'community_post'
+  and app_private.current_user_is_active()
+);
+
+drop policy if exists "thank_you_events_delete_own_community_posts" on public.thank_you_events;
+create policy "thank_you_events_delete_own_community_posts"
+on public.thank_you_events
+for delete
+to authenticated
+using (
+  user_id = (select auth.uid())
+  and kind = 'community_post'
+  and app_private.current_user_is_active()
+);
+
 drop policy if exists "thank_you_adjustments_select_for_active_users" on public.thank_you_adjustments;
 create policy "thank_you_adjustments_select_for_active_users"
 on public.thank_you_adjustments
@@ -472,6 +499,20 @@ on public.thank_you_likes
 for delete
 to authenticated
 using (
+  user_id = (select auth.uid())
+  and app_private.current_user_is_active()
+);
+
+drop policy if exists "thank_you_likes_update_own_for_active_users" on public.thank_you_likes;
+create policy "thank_you_likes_update_own_for_active_users"
+on public.thank_you_likes
+for update
+to authenticated
+using (
+  user_id = (select auth.uid())
+  and app_private.current_user_is_active()
+)
+with check (
   user_id = (select auth.uid())
   and app_private.current_user_is_active()
 );
@@ -511,8 +552,8 @@ with check (
 
 grant select, update on public.profiles to authenticated;
 grant select, insert, update on public.periods to authenticated;
-grant select, insert on public.thank_you_events to authenticated;
-grant select, insert, delete on public.thank_you_likes to authenticated;
+grant select, insert, update, delete on public.thank_you_events to authenticated;
+grant select, insert, update, delete on public.thank_you_likes to authenticated;
 grant select, insert on public.thank_you_comments to authenticated;
 grant select, insert on public.thank_you_adjustments to authenticated;
 revoke all on public.chatwork_settings from anon, authenticated;
