@@ -44,6 +44,11 @@ type ReactionKey =
   | "sparkle"
   | "heart_eyes";
 
+type ProfileSummary = Pick<
+  Profile,
+  "display_name" | "email" | "company_name" | "avatar_url" | "avatar_scale"
+>;
+
 const REACTION_OPTIONS: Array<{
   key: ReactionKey;
   emoji: string;
@@ -60,10 +65,14 @@ const REACTION_OPTIONS: Array<{
 ];
 
 type CommentWithProfile = ThankYouComment & {
-  profiles: Pick<
-    Profile,
-    "display_name" | "email" | "company_name" | "avatar_url" | "avatar_scale"
-  > | null;
+  profiles: ProfileSummary | null;
+};
+
+type ReactionWithProfile = {
+  event_id: string;
+  user_id: string;
+  reaction: ReactionKey;
+  profiles: ProfileSummary | null;
 };
 
 type RealtimeStatus = "connecting" | "connected" | "disconnected";
@@ -110,6 +119,18 @@ function nameForEvent(event: EventWithProfile) {
   return event.profiles?.display_name || event.profiles?.email || "メンバー";
 }
 
+function emptyReactionCounts() {
+  return Object.fromEntries(
+    REACTION_OPTIONS.map((option) => [option.key, 0]),
+  ) as Record<ReactionKey, number>;
+}
+
+function emptyReactionUsers() {
+  return Object.fromEntries(
+    REACTION_OPTIONS.map((option) => [option.key, []]),
+  ) as unknown as Record<ReactionKey, ProfileSummary[]>;
+}
+
 export function DashboardPage() {
   const { user, profile } = useAuth();
   const [period, setPeriod] = useState<Period | null>(null);
@@ -120,8 +141,9 @@ export function DashboardPage() {
       string,
       {
         count: number;
-        reactionCounts: Record<string, number>;
-        reactionByMe: ReactionKey | null;
+        reactionCounts: Record<ReactionKey, number>;
+        reactionByMe: ReactionKey[];
+        reactionUsers: Record<ReactionKey, ProfileSummary[]>;
       }
     >
   >({});
@@ -133,6 +155,7 @@ export function DashboardPage() {
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editPostDraft, setEditPostDraft] = useState("");
   const [reactionPickerId, setReactionPickerId] = useState<string | null>(null);
+  const [reactionPeopleKey, setReactionPeopleKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [savingPost, setSavingPost] = useState(false);
@@ -160,7 +183,9 @@ export function DashboardPage() {
       const [likesResult, commentsResult] = await Promise.all([
         client
           .from("thank_you_likes")
-          .select("event_id,user_id,reaction")
+          .select(
+            "event_id,user_id,reaction,profiles:profiles!thank_you_likes_user_id_fkey(display_name,email,company_name,avatar_url,avatar_scale)",
+          )
           .in("event_id", eventIds),
         client
           .from("thank_you_comments")
@@ -180,27 +205,42 @@ export function DashboardPage() {
       const nextLikes = Object.fromEntries(
         eventIds.map((eventId) => [
           eventId,
-          { count: 0, reactionCounts: {}, reactionByMe: null },
+          {
+            count: 0,
+            reactionCounts: emptyReactionCounts(),
+            reactionByMe: [],
+            reactionUsers: emptyReactionUsers(),
+          },
         ]),
       ) as Record<
         string,
         {
           count: number;
-          reactionCounts: Record<string, number>;
-          reactionByMe: ReactionKey | null;
+          reactionCounts: Record<ReactionKey, number>;
+          reactionByMe: ReactionKey[];
+          reactionUsers: Record<ReactionKey, ProfileSummary[]>;
         }
       >;
 
-      for (const like of likesResult.data ?? []) {
+      for (const like of (likesResult.data ?? []) as ReactionWithProfile[]) {
         const current = nextLikes[like.event_id] ?? {
           count: 0,
-          reactionCounts: {},
-          reactionByMe: null,
+          reactionCounts: emptyReactionCounts(),
+          reactionByMe: [],
+          reactionUsers: emptyReactionUsers(),
         };
         const reaction = like.reaction as ReactionKey;
         current.count += 1;
         current.reactionCounts[reaction] = (current.reactionCounts[reaction] ?? 0) + 1;
-        if (like.user_id === user?.id) current.reactionByMe = reaction;
+        if (like.profiles) {
+          current.reactionUsers[reaction] = [
+            ...current.reactionUsers[reaction],
+            like.profiles,
+          ];
+        }
+        if (like.user_id === user?.id && !current.reactionByMe.includes(reaction)) {
+          current.reactionByMe = [...current.reactionByMe, reaction];
+        }
         nextLikes[like.event_id] = current;
       }
 
@@ -511,16 +551,14 @@ export function DashboardPage() {
 
     setError(null);
 
-    const result = current?.reactionByMe === reaction
+    const result = current?.reactionByMe.includes(reaction)
       ? await client
           .from("thank_you_likes")
           .delete()
           .eq("event_id", eventId)
           .eq("user_id", user?.id ?? "")
-      : await client.from("thank_you_likes").upsert(
-          { event_id: eventId, reaction },
-          { onConflict: "event_id,user_id" },
-        );
+          .eq("reaction", reaction)
+      : await client.from("thank_you_likes").insert({ event_id: eventId, reaction });
 
     if (result.error) {
       setError("いいねを更新できませんでした。");
@@ -924,7 +962,7 @@ export function DashboardPage() {
                       aria-expanded={reactionPickerId === event.id}
                       aria-haspopup="true"
                       className={`mini-action ${
-                        likesByEvent[event.id]?.reactionByMe ? "active" : ""
+                        likesByEvent[event.id]?.reactionByMe.length ? "active" : ""
                       }`}
                       onClick={() =>
                         setReactionPickerId((current) =>
@@ -936,7 +974,8 @@ export function DashboardPage() {
                     >
                       <span className="reaction-current">
                         {REACTION_OPTIONS.find(
-                          (option) => option.key === likesByEvent[event.id]?.reactionByMe,
+                          (option) =>
+                            likesByEvent[event.id]?.reactionByMe.includes(option.key),
                         )?.emoji ?? <ThumbsUp aria-hidden="true" />}
                       </span>
                       {formatNumber(likesByEvent[event.id]?.count ?? 0)}
@@ -947,7 +986,7 @@ export function DashboardPage() {
                           <button
                             aria-label={option.label}
                             className={
-                              likesByEvent[event.id]?.reactionByMe === option.key
+                              likesByEvent[event.id]?.reactionByMe.includes(option.key)
                                 ? "active"
                                 : ""
                             }
@@ -961,6 +1000,64 @@ export function DashboardPage() {
                         ))}
                       </div>
                     ) : null}
+                  </div>
+                  <div className="reaction-summary-list" aria-label="リアクションの内訳">
+                    {REACTION_OPTIONS.filter(
+                      (option) =>
+                        (likesByEvent[event.id]?.reactionCounts[option.key] ?? 0) > 0,
+                    ).map((option) => {
+                      const peopleKey = `${event.id}:${option.key}`;
+                      const people =
+                        likesByEvent[event.id]?.reactionUsers[option.key] ?? [];
+                      return (
+                        <div className="reaction-summary-wrap" key={option.key}>
+                          <button
+                            aria-expanded={reactionPeopleKey === peopleKey}
+                            aria-label={`${option.label}を押した人を見る`}
+                            className={`reaction-summary-button ${
+                              reactionPeopleKey === peopleKey ? "active" : ""
+                            }`}
+                            onClick={() =>
+                              setReactionPeopleKey((current) =>
+                                current === peopleKey ? null : peopleKey,
+                              )
+                            }
+                            title={`${option.label}を押した人を見る`}
+                            type="button"
+                          >
+                            <span>{option.emoji}</span>
+                            {formatNumber(likesByEvent[event.id]?.reactionCounts[option.key] ?? 0)}
+                          </button>
+                          {reactionPeopleKey === peopleKey ? (
+                            <div className="reaction-people-popover">
+                              <strong>
+                                {option.emoji} {option.label}を押した人
+                              </strong>
+                              <div className="reaction-people-list">
+                                {people.map((person, index) => {
+                                  const personName =
+                                    person.display_name || person.email || "メンバー";
+                                  return (
+                                    <div
+                                      className="reaction-person"
+                                      key={`${person.email ?? personName}-${index}`}
+                                    >
+                                      <ProfileAvatar
+                                        name={personName}
+                                        src={person.avatar_url}
+                                        avatarScale={person.avatar_scale}
+                                        size="sm"
+                                      />
+                                      <span>{personName}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                   <span>
                     <MessageCircle aria-hidden="true" />

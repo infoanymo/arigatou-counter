@@ -1151,6 +1151,81 @@ textarea {
   transform: scale(1.1);
 }
 
+.reaction-summary-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.reaction-summary-wrap {
+  position: relative;
+}
+
+.reaction-summary-button {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 8px;
+  color: var(--muted);
+  background: white;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.reaction-summary-button:hover,
+.reaction-summary-button.active {
+  border-color: rgba(0, 45, 85, 0.24);
+  color: var(--teal);
+  background: rgba(0, 45, 85, 0.08);
+}
+
+.reaction-people-popover {
+  position: absolute;
+  z-index: 25;
+  top: calc(100% + 6px);
+  left: 0;
+  width: min(240px, calc(100vw - 48px));
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 10px 24px rgba(0, 45, 85, 0.16);
+}
+
+.reaction-people-popover > strong {
+  display: block;
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+
+.reaction-people-list {
+  display: grid;
+  max-height: 220px;
+  gap: 8px;
+  margin-top: 10px;
+  overflow-y: auto;
+}
+
+.reaction-person {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.reaction-person > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #334155;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
 .mini-action {
   border: 1px solid var(--line);
   cursor: pointer;

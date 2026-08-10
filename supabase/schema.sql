@@ -89,6 +89,30 @@ alter table public.thank_you_likes
 
 do $$
 begin
+  if exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'public.thank_you_likes'::regclass
+      and conname = 'thank_you_likes_pkey'
+      and pg_get_constraintdef(oid) <> 'PRIMARY KEY (event_id, user_id, reaction)'
+  ) then
+    alter table public.thank_you_likes drop constraint thank_you_likes_pkey;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'public.thank_you_likes'::regclass
+      and conname = 'thank_you_likes_pkey'
+  ) then
+    alter table public.thank_you_likes
+      add constraint thank_you_likes_pkey primary key (event_id, user_id, reaction);
+  end if;
+end;
+$$;
+
+do $$
+begin
   if not exists (
     select 1
     from pg_constraint
