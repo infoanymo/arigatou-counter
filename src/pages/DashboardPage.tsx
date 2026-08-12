@@ -477,7 +477,7 @@ export function DashboardPage() {
 
     const sorted = [...result.values()]
       .sort((a, b) => b.count - a.count || b.lastAt.localeCompare(a.lastAt))
-      .slice(0, 10);
+      .slice(0, 5);
 
     let previousCount: number | undefined;
     let previousRank = 0;
