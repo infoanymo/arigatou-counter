@@ -180,9 +180,10 @@ export function DashboardPage() {
   const [realtimeStatus, setRealtimeStatus] =
     useState<RealtimeStatus>("connecting");
   const [bursts, setBursts] = useState<
-    Array<{ id: number; left: number; fontFamily: string }>
+    Array<{ id: number; left: number; fontFamily: string; text: string; variant: number }>
   >([]);
   const burstId = useRef(0);
+  const celebrationVariant = useRef(-1);
 
   const loadInteractions = useCallback(
     async (eventIds: string[]) => {
@@ -534,14 +535,23 @@ export function DashboardPage() {
   }, [thankYouEvents]);
 
   function runCelebration() {
+    const variant = (celebrationVariant.current + 1 + Math.floor(Math.random() * 3)) % 4;
+    celebrationVariant.current = variant;
+    const celebrationSettings = [
+      { colors: ["#002d55", "#f3c84b", "#ffffff"], spread: 64, startVelocity: 34 },
+      { colors: ["#dc5f4f", "#f6a623", "#fff4c2"], spread: 86, startVelocity: 28 },
+      { colors: ["#2f80aa", "#8ed1fc", "#ffffff"], spread: 110, startVelocity: 24 },
+      { colors: ["#8c5bc7", "#f3c84b", "#ff9fb2"], spread: 72, startVelocity: 40 },
+    ][variant];
+
     if (!reducedMotion()) {
       void confetti({
-        colors: ["#002d55", "#2f80aa", "#f3c84b", "#dc5f4f"],
+        colors: celebrationSettings.colors,
         gravity: 0.85,
         origin: { x: 0.5, y: 0.82 },
-        particleCount: 58,
-        spread: 64,
-        startVelocity: 34,
+        particleCount: 58 + variant * 12,
+        spread: celebrationSettings.spread,
+        startVelocity: celebrationSettings.startVelocity,
       });
     }
 
@@ -552,10 +562,18 @@ export function DashboardPage() {
       "'Yu Gothic', 'Noto Sans JP', sans-serif",
       "Georgia, 'Yu Mincho', serif",
     ];
-    const nextBursts = Array.from({ length: reducedMotion() ? 1 : 5 }, () => ({
+    const burstTexts = [
+      ["ありがとう", "うれしい！", "おめでとう！"],
+      ["すばらしい！", "ありがとう", "拍手！"],
+      ["最高です！", "ありがとう", "キラキラ！"],
+      ["お祝い！", "ありがとう", "やったね！"],
+    ][variant];
+    const nextBursts = Array.from({ length: reducedMotion() ? 1 : 5 }, (_, index) => ({
       id: burstId.current++,
       left: 22 + Math.random() * 56,
       fontFamily: burstFonts[Math.floor(Math.random() * burstFonts.length)],
+      text: burstTexts[index % burstTexts.length],
+      variant,
     }));
 
     setBursts((current) => [...current, ...nextBursts]);
@@ -770,7 +788,7 @@ export function DashboardPage() {
 
       {error ? <p className="notice error">{error}</p> : null}
 
-      <section className="hero-band">
+      <section className={`hero-band celebration-variant-${celebrationVariant.current}`}>
         <div className="hero-copy">
           <div className="metric-label">
             <HeartHandshake aria-hidden="true" />
@@ -801,9 +819,10 @@ export function DashboardPage() {
           {bursts.map((burst) => (
             <span
               key={burst.id}
+              className={`burst-word burst-variant-${burst.variant}`}
               style={{ left: `${burst.left}%`, fontFamily: burst.fontFamily }}
             >
-              ありがとう
+              {burst.text}
             </span>
           ))}
         </div>
@@ -829,7 +848,7 @@ export function DashboardPage() {
           </div>
           <span className="good-voices-count">全 {formatNumber(goodVoices.length)} 件</span>
         </div>
-        <p className="good-voices-lead">チャットワークで共有された、お客様からのうれしいお声です。</p>
+        <p className="good-voices-lead">お客様から届いた、うれしいお声です。</p>
         {goodVoices.length ? (
           <>
             <div className="good-voices-list">
