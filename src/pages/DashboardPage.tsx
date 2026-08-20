@@ -164,6 +164,7 @@ export function DashboardPage() {
     Record<string, CommentWithProfile[]>
   >({});
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
+  const [showAllEvents, setShowAllEvents] = useState(false);
   const [postDraft, setPostDraft] = useState("");
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editPostDraft, setEditPostDraft] = useState("");
@@ -425,9 +426,10 @@ export function DashboardPage() {
   }, [loadAdjustments, loadEvents, loadGoodVoices, period]);
 
   const recentEvents = useMemo(() => events.slice(0, 8), [events]);
+  const displayedEvents = showAllEvents ? events : recentEvents;
   const recentEventIds = useMemo(
-    () => recentEvents.map((event) => event.id),
-    [recentEvents],
+    () => displayedEvents.map((event) => event.id),
+    [displayedEvents],
   );
   const recentEventKey = recentEventIds.join("|");
 
@@ -457,6 +459,11 @@ export function DashboardPage() {
       void client.removeChannel(channel);
     };
   }, [loadInteractions, period, recentEventIds, recentEventKey]);
+
+  useEffect(() => {
+    if (!showAllEvents) return;
+    void loadInteractions(events.map((event) => event.id));
+  }, [events, loadInteractions, showAllEvents]);
 
   const thankYouEvents = useMemo(
     () => events.filter((event) => event.kind === "thank_you"),
@@ -944,7 +951,7 @@ export function DashboardPage() {
             </div>
           </form>
           <div className="timeline">
-            {recentEvents.map((event) => (
+            {displayedEvents.map((event) => (
               <div className="timeline-card" key={event.id}>
                 <div className="timeline-row">
                   <ProfileAvatar
@@ -1202,6 +1209,18 @@ export function DashboardPage() {
               </div>
             ) : null}
           </div>
+          {events.length > recentEvents.length ? (
+            <button
+              className="history-toggle"
+              onClick={() => setShowAllEvents((current) => !current)}
+              type="button"
+              aria-expanded={showAllEvents}
+            >
+              {showAllEvents
+                ? "直近8件に戻す"
+                : `過去のありがとうをすべて見る（全${formatNumber(events.length)}件）`}
+            </button>
+          ) : null}
         </article>
       </section>
     </div>
