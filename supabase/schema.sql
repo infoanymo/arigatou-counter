@@ -150,6 +150,7 @@ create table if not exists public.chatwork_settings (
   rooms jsonb not null default '[]'::jsonb
     constraint chatwork_settings_rooms_array_check check (jsonb_typeof(rooms) = 'array'),
   good_voice_enabled boolean not null default false,
+  good_voice_rooms jsonb not null default '[]'::jsonb,
   good_voice_keywords text[] not null default array['お客様','お声','見えるようになりました','よく見える','改善'],
   enabled boolean not null default false,
   updated_by uuid references public.profiles (id) on delete set null,
@@ -180,6 +181,7 @@ create table if not exists public.chatwork_monthly_notifications (
 alter table public.chatwork_settings
   add column if not exists rooms jsonb not null default '[]'::jsonb,
   add column if not exists good_voice_enabled boolean not null default false,
+  add column if not exists good_voice_rooms jsonb not null default '[]'::jsonb,
   add column if not exists good_voice_keywords text[] not null default array['お客様','お声','見えるようになりました','よく見える','改善'];
 
 create table if not exists public.chatwork_good_voices (

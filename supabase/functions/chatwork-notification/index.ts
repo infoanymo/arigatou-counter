@@ -9,6 +9,7 @@ type ChatworkSettings = {
   rooms: unknown;
   enabled: boolean;
   good_voice_enabled: boolean;
+  good_voice_rooms: unknown;
   good_voice_keywords: string[] | null;
   updated_at: string;
   updated_by: string | null;
@@ -181,6 +182,14 @@ function enabledRoomsForSettings(settings: ChatworkSettings | null) {
   return roomsForSettings(settings).filter((room) => room.enabled);
 }
 
+function goodVoiceRoomsForSettings(settings: ChatworkSettings | null) {
+  return normalizeRooms(settings?.good_voice_rooms);
+}
+
+function enabledGoodVoiceRoomsForSettings(settings: ChatworkSettings | null) {
+  return goodVoiceRoomsForSettings(settings).filter((room) => room.enabled);
+}
+
 function getAdminKey() {
   const legacyServiceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (legacyServiceRole) return legacyServiceRole;
@@ -268,6 +277,7 @@ function publicSettings(settings: ChatworkSettings | null) {
     rooms,
     tokenConfigured: Boolean(settings?.api_token),
     goodVoiceEnabled: settings?.good_voice_enabled ?? false,
+    goodVoiceRooms: goodVoiceRoomsForSettings(settings),
     goodVoiceKeywords: settings?.good_voice_keywords ?? [],
     updatedAt: settings?.updated_at ?? null,
   };
@@ -476,7 +486,7 @@ async function syncGoodVoices(admin: SupabaseAdmin) {
   if (!settings?.good_voice_enabled || !settings.api_token) {
     return { ok: true, imported: 0, skipped: "disabled" };
   }
-  const rooms = enabledRoomsForSettings(settings);
+  const rooms = enabledGoodVoiceRoomsForSettings(settings);
   const keywords = (settings.good_voice_keywords ?? []).filter(Boolean);
   let imported = 0;
 
@@ -554,6 +564,7 @@ async function saveSettings(
   const roomId = enabledRooms[0]?.roomId ?? rooms[0]?.roomId ?? "";
   const enabled = body.enabled === true;
   const goodVoiceEnabled = body.goodVoiceEnabled === true;
+  const goodVoiceRooms = normalizeRooms(body.goodVoiceRooms);
   const goodVoiceKeywords = Array.isArray(body.goodVoiceKeywords)
     ? body.goodVoiceKeywords.map(cleanText).filter(Boolean).slice(0, 20)
     : current?.good_voice_keywords ?? [];
@@ -581,6 +592,7 @@ async function saveSettings(
         rooms,
         enabled,
         good_voice_enabled: goodVoiceEnabled,
+        good_voice_rooms: goodVoiceRooms,
         good_voice_keywords: goodVoiceKeywords,
         updated_by: callerId,
       },

@@ -121,6 +121,7 @@ type ChatworkSettings = {
   updatedAt: string | null;
   goodVoiceEnabled: boolean;
   goodVoiceKeywords: string[];
+  goodVoiceRooms: ChatworkRoomSettings[];
 };
 
 type ChatworkRoomSettings = {
@@ -427,6 +428,9 @@ export function AdminPage({ section }: { section: AdminSection }) {
   const [chatworkRooms, setChatworkRooms] = useState<ChatworkRoomSettings[]>(() => [
     createChatworkRoom(),
   ]);
+  const [goodVoiceRooms, setGoodVoiceRooms] = useState<ChatworkRoomSettings[]>(() => [
+    createChatworkRoom(),
+  ]);
   const [chatworkEnabled, setChatworkEnabled] = useState(false);
   const [goodVoiceEnabled, setGoodVoiceEnabled] = useState(false);
   const [goodVoiceKeywords, setGoodVoiceKeywords] = useState("お客様,お声,見えるようになりました,よく見える,改善");
@@ -657,6 +661,7 @@ export function AdminPage({ section }: { section: AdminSection }) {
           (response.lastNotification ? [response.lastNotification] : []),
       );
       setChatworkRooms(normalizeChatworkRooms(response.settings.rooms));
+      setGoodVoiceRooms(normalizeChatworkRooms(response.settings.goodVoiceRooms));
       setChatworkEnabled(response.settings.enabled);
       setGoodVoiceEnabled(response.settings.goodVoiceEnabled);
       setGoodVoiceKeywords(response.settings.goodVoiceKeywords.join(","));
@@ -850,6 +855,22 @@ export function AdminPage({ section }: { section: AdminSection }) {
     );
   }
 
+  function updateGoodVoiceRoom(roomId: string, updates: Partial<ChatworkRoomSettings>) {
+    setGoodVoiceRooms((current) =>
+      current.map((room) => (room.id === roomId ? { ...room, ...updates } : room)),
+    );
+  }
+
+  function addGoodVoiceRoom() {
+    setGoodVoiceRooms((current) => [...current, createChatworkRoom()]);
+  }
+
+  function removeGoodVoiceRoom(roomId: string) {
+    setGoodVoiceRooms((current) =>
+      current.length > 1 ? current.filter((room) => room.id !== roomId) : current,
+    );
+  }
+
   async function handleChatworkSave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSavingChatwork(true);
@@ -867,6 +888,12 @@ export function AdminPage({ section }: { section: AdminSection }) {
           enabled: room.enabled,
         })),
         enabled: chatworkEnabled,
+        goodVoiceRooms: goodVoiceRooms.map((room) => ({
+          id: room.id,
+          name: room.name.trim(),
+          roomId: room.roomId.trim(),
+          enabled: room.enabled,
+        })),
         goodVoiceEnabled,
         goodVoiceKeywords: goodVoiceKeywords.split(",").map((keyword) => keyword.trim()).filter(Boolean),
       });
@@ -1368,25 +1395,6 @@ export function AdminPage({ section }: { section: AdminSection }) {
                 />
                 <span>月次通知を有効にする</span>
               </label>
-              <div className="chatwork-good-voice-config">
-                <label className="checkbox-field">
-                  <input
-                    checked={goodVoiceEnabled}
-                    onChange={(event) => setGoodVoiceEnabled(event.target.checked)}
-                    type="checkbox"
-                  />
-                  <span>「いいお声」の自動取込を有効にする</span>
-                </label>
-                <label>
-                  <span>取込キーワード（カンマ区切り）</span>
-                  <input
-                    onChange={(event) => setGoodVoiceKeywords(event.target.value)}
-                    placeholder="お客様,お声,見えるようになりました"
-                    value={goodVoiceKeywords}
-                  />
-                </label>
-                <p className="form-help">対象ルームの本文にいずれかのキーワードを含むメッセージを、定期実行で取り込みます。</p>
-              </div>
               <div className="chatwork-room-list">
                 {chatworkRooms.map((room, index) => (
                   <section className="chatwork-room-config" key={room.id}>
@@ -1473,6 +1481,46 @@ export function AdminPage({ section }: { section: AdminSection }) {
                 <MessageCircle aria-hidden="true" />
                 {savingChatwork ? "保存中..." : "連携設定を保存"}
               </button>
+            </form>
+          </article>
+
+          <article className="panel chatwork-panel">
+            <div className="panel-title">
+              <MessageCircle aria-hidden="true" />
+              <div>
+                <p className="eyebrow">Customer voices</p>
+                <h2>いいお声の取込設定</h2>
+              </div>
+            </div>
+            <p className="form-help">Chatworkの対象ルームから、キーワードを含む投稿を自動取得します。月次通知とは別に設定できます。</p>
+            <form className="form-stack" onSubmit={handleChatworkSave}>
+              <label className="checkbox-field">
+                <input checked={goodVoiceEnabled} onChange={(event) => setGoodVoiceEnabled(event.target.checked)} type="checkbox" />
+                <span>「いいお声」の自動取込を有効にする</span>
+              </label>
+              <label>
+                <span>取込キーワード（カンマ区切り）</span>
+                <input onChange={(event) => setGoodVoiceKeywords(event.target.value)} placeholder="お客様,お声,見えるようになりました" value={goodVoiceKeywords} />
+              </label>
+              <div className="chatwork-room-list">
+                {goodVoiceRooms.map((room, index) => (
+                  <section className="chatwork-room-config" key={room.id}>
+                    <div className="chatwork-room-header">
+                      <label className="checkbox-field chatwork-room-toggle">
+                        <input checked={room.enabled} onChange={(event) => updateGoodVoiceRoom(room.id, { enabled: event.target.checked })} type="checkbox" />
+                        <span>{room.name.trim() || `取込ルーム ${index + 1}`}</span>
+                      </label>
+                      {goodVoiceRooms.length > 1 ? <button aria-label="取込ルームを削除" className="icon-button chatwork-room-remove" onClick={() => removeGoodVoiceRoom(room.id)} type="button"><Trash2 aria-hidden="true" /></button> : null}
+                    </div>
+                    <div className="form-grid chatwork-room-fields">
+                      <label><span>表示名</span><input onChange={(event) => updateGoodVoiceRoom(room.id, { name: event.target.value })} placeholder={`取込ルーム ${index + 1}`} type="text" value={room.name} /></label>
+                      <label><span>ルームID</span><input inputMode="numeric" onChange={(event) => updateGoodVoiceRoom(room.id, { roomId: event.target.value })} placeholder="123456789" required={goodVoiceEnabled && room.enabled} type="text" value={room.roomId} /></label>
+                    </div>
+                  </section>
+                ))}
+              </div>
+              <button className="button button-secondary" onClick={addGoodVoiceRoom} type="button"><Plus aria-hidden="true" />取込ルームを追加</button>
+              <button className="button button-primary" disabled={savingChatwork}><MessageCircle aria-hidden="true" />{savingChatwork ? "保存中..." : "いいお声の設定を保存"}</button>
             </form>
           </article>
 

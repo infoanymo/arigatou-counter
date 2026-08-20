@@ -229,6 +229,7 @@ export type Database = {
           room_id: string | null;
           rooms: Json;
           good_voice_enabled: boolean;
+          good_voice_rooms: Json;
           good_voice_keywords: string[];
           enabled: boolean;
           updated_by: string | null;
@@ -241,6 +242,7 @@ export type Database = {
           room_id?: string | null;
           rooms?: Json;
           good_voice_enabled?: boolean;
+          good_voice_rooms?: Json;
           good_voice_keywords?: string[];
           enabled?: boolean;
           updated_by?: string | null;
@@ -252,6 +254,7 @@ export type Database = {
           room_id?: string | null;
           rooms?: Json;
           good_voice_enabled?: boolean;
+          good_voice_rooms?: Json;
           good_voice_keywords?: string[];
           enabled?: boolean;
           updated_by?: string | null;
