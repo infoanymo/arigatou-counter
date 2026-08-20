@@ -557,7 +557,7 @@ async function addManualGoodVoice(
       message_body: messageBody,
       sent_at: sentAt.toISOString(),
     })
-    .select("id,chatwork_message_id,room_id,room_name,author_name,message_body,sent_at,created_at")
+    .select("id,chatwork_message_id,room_id,room_name,author_name,message_body,sent_at")
     .single();
 
   if (error) throw new HttpError(error.message, 400);

@@ -178,7 +178,7 @@ type ManualGoodVoice = {
   author_name: string | null;
   message_body: string;
   sent_at: string;
-  created_at: string;
+  created_at?: string;
 };
 
 const planLabels = {
