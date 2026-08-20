@@ -58,7 +58,6 @@ type GoodVoice = {
   author_name: string | null;
   message_body: string;
   sent_at: string;
-  created_at: string;
 };
 
 const REACTION_OPTIONS: Array<{
@@ -318,7 +317,7 @@ export function DashboardPage() {
   const loadGoodVoices = useCallback(async () => {
     const { data, error: voicesError } = await getSupabase()
       .from("chatwork_good_voices")
-      .select("id,chatwork_message_id,room_id,room_name,author_name,message_body,sent_at,created_at")
+      .select("id,chatwork_message_id,room_id,room_name,author_name,message_body,sent_at")
       .order("sent_at", { ascending: false })
       .limit(5000)
       .returns<GoodVoice[]>();
