@@ -7,6 +7,7 @@ import {
   KeyRound,
   MailPlus,
   MessageCircle,
+  Pencil,
   Plus,
   RefreshCcw,
   Send,
@@ -434,6 +435,10 @@ export function AdminPage({ section }: { section: AdminSection }) {
   const [chatworkEnabled, setChatworkEnabled] = useState(false);
   const [goodVoiceEnabled, setGoodVoiceEnabled] = useState(false);
   const [goodVoiceKeywords, setGoodVoiceKeywords] = useState("お客様,お声,見えるようになりました,よく見える,改善");
+  const [manualGoodVoiceBody, setManualGoodVoiceBody] = useState("");
+  const [manualGoodVoiceAuthor, setManualGoodVoiceAuthor] = useState("");
+  const [manualGoodVoiceDate, setManualGoodVoiceDate] = useState(today);
+  const [addingManualGoodVoice, setAddingManualGoodVoice] = useState(false);
   const [savingChatwork, setSavingChatwork] = useState(false);
   const [sendingChatwork, setSendingChatwork] = useState<"test" | "monthly" | null>(
     null,
@@ -907,6 +912,30 @@ export function AdminPage({ section }: { section: AdminSection }) {
       );
     } finally {
       setSavingChatwork(false);
+    }
+  }
+
+  async function handleAddManualGoodVoice(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!manualGoodVoiceBody.trim()) return;
+    setAddingManualGoodVoice(true);
+    setMessage(null);
+
+    try {
+      await invokeChatwork({
+        action: "add-manual-good-voice",
+        messageBody: manualGoodVoiceBody.trim(),
+        authorName: manualGoodVoiceAuthor.trim(),
+        sentAt: manualGoodVoiceDate,
+      });
+      setManualGoodVoiceBody("");
+      setManualGoodVoiceAuthor("");
+      setManualGoodVoiceDate(today);
+      setMessage("いいお声を追加しました。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "いいお声を追加できませんでした。");
+    } finally {
+      setAddingManualGoodVoice(false);
     }
   }
 
@@ -1492,15 +1521,11 @@ export function AdminPage({ section }: { section: AdminSection }) {
                 <h2>いいお声の取込設定</h2>
               </div>
             </div>
-            <p className="form-help">Chatworkの対象ルームから、キーワードを含む投稿を自動取得します。月次通知とは別に設定できます。</p>
+            <p className="form-help">Chatworkの対象ルームから、【お声共有】の枠内にある文章だけを自動取得します。月次通知とは別に設定できます。</p>
             <form className="form-stack" onSubmit={handleChatworkSave}>
               <label className="checkbox-field">
                 <input checked={goodVoiceEnabled} onChange={(event) => setGoodVoiceEnabled(event.target.checked)} type="checkbox" />
                 <span>「いいお声」の自動取込を有効にする</span>
-              </label>
-              <label>
-                <span>取込キーワード（カンマ区切り）</span>
-                <input onChange={(event) => setGoodVoiceKeywords(event.target.value)} placeholder="お客様,お声,見えるようになりました" value={goodVoiceKeywords} />
               </label>
               <div className="chatwork-room-list">
                 {goodVoiceRooms.map((room, index) => (
@@ -1521,6 +1546,43 @@ export function AdminPage({ section }: { section: AdminSection }) {
               </div>
               <button className="button button-secondary" onClick={addGoodVoiceRoom} type="button"><Plus aria-hidden="true" />取込ルームを追加</button>
               <button className="button button-primary" disabled={savingChatwork}><MessageCircle aria-hidden="true" />{savingChatwork ? "保存中..." : "いいお声の設定を保存"}</button>
+            </form>
+          </article>
+
+          <article className="panel chatwork-panel">
+            <div className="panel-title">
+              <Pencil aria-hidden="true" />
+              <div>
+                <p className="eyebrow">Manual entry</p>
+                <h2>いいお声を手動で追加</h2>
+              </div>
+            </div>
+            <p className="form-help">Chatworkに共有していないお声も、ここから直接登録できます。</p>
+            <form className="form-stack" onSubmit={handleAddManualGoodVoice}>
+              <label>
+                <span>いいお声の本文</span>
+                <textarea
+                  onChange={(event) => setManualGoodVoiceBody(event.target.value)}
+                  placeholder="例：目のかすみがとれて、はっきり見えるようになりました。"
+                  required
+                  rows={6}
+                  value={manualGoodVoiceBody}
+                />
+              </label>
+              <div className="form-grid chatwork-room-fields">
+                <label>
+                  <span>お客様名・補足（任意）</span>
+                  <input onChange={(event) => setManualGoodVoiceAuthor(event.target.value)} placeholder="任意" value={manualGoodVoiceAuthor} />
+                </label>
+                <label>
+                  <span>発生日</span>
+                  <input onChange={(event) => setManualGoodVoiceDate(event.target.value)} required type="date" value={manualGoodVoiceDate} />
+                </label>
+              </div>
+              <button className="button button-primary" disabled={addingManualGoodVoice} type="submit">
+                <Pencil aria-hidden="true" />
+                {addingManualGoodVoice ? "追加中..." : "いいお声を追加"}
+              </button>
             </form>
           </article>
 

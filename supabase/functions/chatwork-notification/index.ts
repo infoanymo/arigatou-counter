@@ -476,9 +476,17 @@ async function fetchChatworkMessages(
   return Array.isArray(parsed) ? parsed as ChatworkIncomingMessage[] : [];
 }
 
-function isGoodVoice(body: string, keywords: string[]) {
-  const normalized = body.replace(/\s/g, "");
-  return keywords.some((keyword) => keyword.trim() && normalized.includes(keyword.replace(/\s/g, "")));
+function extractGoodVoiceBody(body: string) {
+  const marker = "【お声共有】";
+  const markerIndex = body.indexOf(marker);
+  if (markerIndex < 0) return null;
+
+  let extracted = body.slice(markerIndex + marker.length);
+  extracted = extracted.replace(/^\s*\[\/title\]\s*/i, "");
+  const closingInfoIndex = extracted.search(/\[\/info\]/i);
+  if (closingInfoIndex >= 0) extracted = extracted.slice(0, closingInfoIndex);
+  extracted = extracted.replace(/\[\/?(?:info|title)\]/gi, "").trim();
+  return extracted || null;
 }
 
 async function syncGoodVoices(admin: SupabaseAdmin) {
@@ -487,7 +495,6 @@ async function syncGoodVoices(admin: SupabaseAdmin) {
     return { ok: true, imported: 0, skipped: "disabled" };
   }
   const rooms = enabledGoodVoiceRoomsForSettings(settings);
-  const keywords = (settings.good_voice_keywords ?? []).filter(Boolean);
   let imported = 0;
 
   for (const room of rooms) {
@@ -501,10 +508,10 @@ async function syncGoodVoices(admin: SupabaseAdmin) {
 
     for (const message of messages) {
       const messageId = message.message_id ? String(message.message_id) : "";
-      const body = cleanText(message.body);
+      const body = extractGoodVoiceBody(cleanText(message.body));
       if (!messageId) continue;
       newestMessageId = messageId;
-      if (!body || !isGoodVoice(body, keywords)) continue;
+      if (!body) continue;
       const { error } = await admin.from("chatwork_good_voices").upsert({
         chatwork_message_id: messageId,
         room_id: room.roomId,
@@ -525,6 +532,36 @@ async function syncGoodVoices(admin: SupabaseAdmin) {
     }
   }
   return { ok: true, imported };
+}
+
+async function addManualGoodVoice(
+  admin: SupabaseAdmin,
+  body: Record<string, unknown>,
+) {
+  const messageBody = cleanText(body.messageBody);
+  if (!messageBody) throw new HttpError("いいお声の本文を入力してください。", 400);
+
+  const sentAtValue = cleanText(body.sentAt);
+  const sentAt = sentAtValue ? new Date(sentAtValue) : new Date();
+  if (Number.isNaN(sentAt.getTime())) {
+    throw new HttpError("日付の形式が正しくありません。", 400);
+  }
+
+  const { data, error } = await admin
+    .from("chatwork_good_voices")
+    .insert({
+      chatwork_message_id: null,
+      room_id: "manual",
+      room_name: "手動入力",
+      author_name: cleanText(body.authorName) || null,
+      message_body: messageBody,
+      sent_at: sentAt.toISOString(),
+    })
+    .select("id,chatwork_message_id,room_id,room_name,author_name,message_body,sent_at,created_at")
+    .single();
+
+  if (error) throw new HttpError(error.message, 400);
+  return { voice: data };
 }
 
 async function settingsResponse(admin: SupabaseAdmin, targetMonthValue?: string) {
@@ -826,6 +863,10 @@ Deno.serve(async (req) => {
 
     if (action === "save-settings") {
       return json(await saveSettings(admin, caller.id, body));
+    }
+
+    if (action === "add-manual-good-voice") {
+      return json(await addManualGoodVoice(admin, body));
     }
 
     if (action === "send-test") {

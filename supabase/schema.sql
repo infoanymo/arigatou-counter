@@ -186,7 +186,7 @@ alter table public.chatwork_settings
 
 create table if not exists public.chatwork_good_voices (
   id uuid primary key default gen_random_uuid(),
-  chatwork_message_id text not null unique,
+  chatwork_message_id text unique,
   room_id text not null,
   room_name text,
   author_name text,
@@ -194,6 +194,9 @@ create table if not exists public.chatwork_good_voices (
   sent_at timestamptz not null,
   created_at timestamptz not null default now()
 );
+
+alter table public.chatwork_good_voices
+  alter column chatwork_message_id drop not null;
 
 create table if not exists public.chatwork_good_voice_sync_state (
   room_id text primary key,

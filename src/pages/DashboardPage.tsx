@@ -52,7 +52,7 @@ type ProfileSummary = Pick<
 
 type GoodVoice = {
   id: string;
-  chatwork_message_id: string;
+  chatwork_message_id: string | null;
   room_id: string;
   room_name: string | null;
   author_name: string | null;
