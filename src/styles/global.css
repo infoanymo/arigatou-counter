@@ -2185,6 +2185,94 @@ textarea {
   gap: 22px;
 }
 
+.chatwork-collapsible {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+}
+
+.chatwork-collapsible-summary {
+  display: flex;
+  min-height: 88px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px;
+  cursor: pointer;
+  list-style: none;
+  transition: background-color 160ms ease;
+}
+
+.chatwork-collapsible-summary::-webkit-details-marker {
+  display: none;
+}
+
+.chatwork-collapsible-summary:hover {
+  background: rgba(0, 45, 85, 0.035);
+}
+
+.chatwork-collapsible-summary:focus-visible {
+  outline: 3px solid rgba(0, 45, 85, 0.22);
+  outline-offset: -3px;
+}
+
+.chatwork-collapsible-action {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  color: var(--teal-dark);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.chatwork-collapsible-action svg {
+  width: 20px;
+  height: 20px;
+  transition: transform 180ms ease;
+}
+
+.chatwork-collapsible[open] .chatwork-collapsible-action svg {
+  transform: rotate(180deg);
+}
+
+.chatwork-collapsible[open] .chatwork-collapsible-summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.chatwork-collapsible[open] .chatwork-collapsible-action > span::after {
+  content: "閉じる";
+}
+
+.chatwork-collapsible[open] .chatwork-collapsible-action > span {
+  font-size: 0;
+}
+
+.chatwork-collapsible[open] .chatwork-collapsible-action > span::after {
+  font-size: 0.82rem;
+}
+
+.chatwork-panel-content {
+  display: grid;
+  gap: 22px;
+  padding: 20px;
+}
+
+@media (max-width: 640px) {
+  .chatwork-collapsible-summary {
+    min-height: 78px;
+    padding: 16px;
+  }
+
+  .chatwork-collapsible-action > span {
+    display: none;
+  }
+
+  .chatwork-panel-content {
+    padding: 16px;
+  }
+}
+
 .manual-good-voice-history {
   display: grid;
   gap: 14px;

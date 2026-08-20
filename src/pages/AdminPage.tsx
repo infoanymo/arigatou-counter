@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   Calculator,
+  ChevronDown,
   CreditCard,
   ExternalLink,
   KeyRound,
@@ -1424,23 +1425,30 @@ export function AdminPage({ section }: { section: AdminSection }) {
       </section>
       ) : section === "chatwork" ? (
         <section className="admin-grid chatwork-grid">
-          <article className="panel chatwork-panel">
-            <div className="panel-title">
-              <MessageCircle aria-hidden="true" />
-              <div>
-                <p className="eyebrow">Chatwork</p>
-                <h2>チャットワーク連携</h2>
+          <details className="panel chatwork-panel chatwork-collapsible">
+            <summary className="chatwork-collapsible-summary">
+              <div className="panel-title">
+                <MessageCircle aria-hidden="true" />
+                <div>
+                  <p className="eyebrow">Chatwork</p>
+                  <h2>チャットワーク連携</h2>
+                </div>
               </div>
-            </div>
-            <div
-              className={`billing-status ${chatworkSettings?.enabled ? "live" : "offline"}`}
-            >
-              <span>
-                {chatworkSettings?.enabled ? "月次通知 有効" : "月次通知 無効"}
+              <span className="chatwork-collapsible-action">
+                <span>設定を開く</span>
+                <ChevronDown aria-hidden="true" />
               </span>
-              <strong>毎月3日 9:00送信</strong>
-            </div>
-            <form className="form-stack" onSubmit={handleChatworkSave}>
+            </summary>
+            <div className="chatwork-panel-content">
+              <div
+                className={`billing-status ${chatworkSettings?.enabled ? "live" : "offline"}`}
+              >
+                <span>
+                  {chatworkSettings?.enabled ? "月次通知 有効" : "月次通知 無効"}
+                </span>
+                <strong>毎月3日 9:00送信</strong>
+              </div>
+              <form className="form-stack" onSubmit={handleChatworkSave}>
               <label>
                 <span>APIトークン</span>
                 <div className="input-shell">
@@ -1552,17 +1560,25 @@ export function AdminPage({ section }: { section: AdminSection }) {
                 <MessageCircle aria-hidden="true" />
                 {savingChatwork ? "保存中..." : "連携設定を保存"}
               </button>
-            </form>
-          </article>
-
-          <article className="panel chatwork-panel">
-            <div className="panel-title">
-              <MessageCircle aria-hidden="true" />
-              <div>
-                <p className="eyebrow">Customer voices</p>
-                <h2>いいお声の取込設定</h2>
-              </div>
+              </form>
             </div>
+          </details>
+
+          <details className="panel chatwork-panel chatwork-collapsible">
+            <summary className="chatwork-collapsible-summary">
+              <div className="panel-title">
+                <MessageCircle aria-hidden="true" />
+                <div>
+                  <p className="eyebrow">Customer voices</p>
+                  <h2>いいお声の取込設定</h2>
+                </div>
+              </div>
+              <span className="chatwork-collapsible-action">
+                <span>設定を開く</span>
+                <ChevronDown aria-hidden="true" />
+              </span>
+            </summary>
+            <div className="chatwork-panel-content">
             <p className="form-help">Chatworkの対象ルームから、【お声共有】の枠内にある文章だけを自動取得します。月次通知とは別に設定できます。</p>
             <form className="form-stack" onSubmit={handleChatworkSave}>
               <label className="checkbox-field">
@@ -1589,16 +1605,24 @@ export function AdminPage({ section }: { section: AdminSection }) {
               <button className="button button-secondary" onClick={addGoodVoiceRoom} type="button"><Plus aria-hidden="true" />取込ルームを追加</button>
               <button className="button button-primary" disabled={savingChatwork}><MessageCircle aria-hidden="true" />{savingChatwork ? "保存中..." : "いいお声の設定を保存"}</button>
             </form>
-          </article>
-
-          <article className="panel chatwork-panel">
-            <div className="panel-title">
-              <Pencil aria-hidden="true" />
-              <div>
-                <p className="eyebrow">Manual entry</p>
-                <h2>いいお声を手動で追加</h2>
-              </div>
             </div>
+          </details>
+
+          <details className="panel chatwork-panel chatwork-collapsible">
+            <summary className="chatwork-collapsible-summary">
+              <div className="panel-title">
+                <Pencil aria-hidden="true" />
+                <div>
+                  <p className="eyebrow">Manual entry</p>
+                  <h2>いいお声を手動で追加</h2>
+                </div>
+              </div>
+              <span className="chatwork-collapsible-action">
+                <span>入力欄を開く</span>
+                <ChevronDown aria-hidden="true" />
+              </span>
+            </summary>
+            <div className="chatwork-panel-content">
             <p className="form-help">Chatworkに共有していないお声も、ここから直接登録できます。</p>
             <form className="form-stack" onSubmit={handleAddManualGoodVoice}>
               <label>
@@ -1668,16 +1692,24 @@ export function AdminPage({ section }: { section: AdminSection }) {
                 <p className="form-help">手動で追加したお声はまだありません。</p>
               )}
             </div>
-          </article>
-
-          <article className="panel chatwork-panel">
-            <div className="panel-title">
-              <Send aria-hidden="true" />
-              <div>
-                <p className="eyebrow">Preview</p>
-                <h2>送信プレビュー</h2>
-              </div>
             </div>
+          </details>
+
+          <details className="panel chatwork-panel chatwork-collapsible">
+            <summary className="chatwork-collapsible-summary">
+              <div className="panel-title">
+                <Send aria-hidden="true" />
+                <div>
+                  <p className="eyebrow">Preview</p>
+                  <h2>送信プレビュー</h2>
+                </div>
+              </div>
+              <span className="chatwork-collapsible-action">
+                <span>プレビューを開く</span>
+                <ChevronDown aria-hidden="true" />
+              </span>
+            </summary>
+            <div className="chatwork-panel-content">
             <div className="billing-metrics">
               <div>
                 <span>対象月</span>
@@ -1755,7 +1787,8 @@ export function AdminPage({ section }: { section: AdminSection }) {
                 <strong>未送信</strong>
               )}
             </div>
-          </article>
+            </div>
+          </details>
         </section>
       ) : (
         <section className="admin-grid billing-grid">
