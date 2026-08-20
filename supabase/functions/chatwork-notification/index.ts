@@ -567,7 +567,7 @@ async function addManualGoodVoice(
 async function listManualGoodVoices(admin: SupabaseAdmin) {
   const { data, error } = await admin
     .from("chatwork_good_voices")
-    .select("id,chatwork_message_id,room_id,room_name,author_name,message_body,sent_at,created_at")
+    .select("id,chatwork_message_id,room_id,room_name,author_name,message_body,sent_at")
     // Older hand-entered records may predate the `room_id = manual` marker.
     // A null Chatwork message id is the durable signal that the record was not imported.
     .or("room_id.eq.manual,chatwork_message_id.is.null")
