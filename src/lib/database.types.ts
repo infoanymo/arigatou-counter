@@ -228,6 +228,8 @@ export type Database = {
           api_token: string | null;
           room_id: string | null;
           rooms: Json;
+          good_voice_enabled: boolean;
+          good_voice_keywords: string[];
           enabled: boolean;
           updated_by: string | null;
           created_at: string;
@@ -238,6 +240,8 @@ export type Database = {
           api_token?: string | null;
           room_id?: string | null;
           rooms?: Json;
+          good_voice_enabled?: boolean;
+          good_voice_keywords?: string[];
           enabled?: boolean;
           updated_by?: string | null;
           created_at?: string;
@@ -247,6 +251,8 @@ export type Database = {
           api_token?: string | null;
           room_id?: string | null;
           rooms?: Json;
+          good_voice_enabled?: boolean;
+          good_voice_keywords?: string[];
           enabled?: boolean;
           updated_by?: string | null;
           updated_at?: string;
@@ -311,6 +317,30 @@ export type Database = {
           triggered_by?: "admin" | "cron" | null;
           updated_at?: string;
         };
+        Relationships: [];
+      };
+      chatwork_good_voices: {
+        Row: {
+          id: string;
+          chatwork_message_id: string;
+          room_id: string;
+          room_name: string | null;
+          author_name: string | null;
+          message_body: string;
+          sent_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          chatwork_message_id: string;
+          room_id: string;
+          room_name?: string | null;
+          author_name?: string | null;
+          message_body: string;
+          sent_at: string;
+          created_at?: string;
+        };
+        Update: never;
         Relationships: [];
       };
     };

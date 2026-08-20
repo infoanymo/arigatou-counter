@@ -5,6 +5,7 @@ import {
   Crown,
   HeartHandshake,
   MessageCircle,
+  MessageSquareQuote,
   Pencil,
   Radio,
   Send,
@@ -48,6 +49,17 @@ type ProfileSummary = Pick<
   Profile,
   "display_name" | "email" | "company_name" | "avatar_url" | "avatar_scale"
 >;
+
+type GoodVoice = {
+  id: string;
+  chatwork_message_id: string;
+  room_id: string;
+  room_name: string | null;
+  author_name: string | null;
+  message_body: string;
+  sent_at: string;
+  created_at: string;
+};
 
 const REACTION_OPTIONS: Array<{
   key: ReactionKey;
@@ -136,6 +148,7 @@ export function DashboardPage() {
   const [period, setPeriod] = useState<Period | null>(null);
   const [events, setEvents] = useState<EventWithProfile[]>([]);
   const [adjustments, setAdjustments] = useState<ThankYouAdjustment[]>([]);
+  const [goodVoices, setGoodVoices] = useState<GoodVoice[]>([]);
   const [likesByEvent, setLikesByEvent] = useState<
     Record<
       string,
@@ -300,6 +313,20 @@ export function DashboardPage() {
     setAdjustments(data ?? []);
   }, []);
 
+  const loadGoodVoices = useCallback(async () => {
+    const { data, error: voicesError } = await getSupabase()
+      .from("chatwork_good_voices")
+      .select("id,chatwork_message_id,room_id,room_name,author_name,message_body,sent_at,created_at")
+      .order("sent_at", { ascending: false })
+      .limit(5000)
+      .returns<GoodVoice[]>();
+    if (voicesError) {
+      setError("お客様の声を読み込めませんでした。");
+      return;
+    }
+    setGoodVoices(data ?? []);
+  }, []);
+
   const loadDashboard = useCallback(async () => {
     const client = getSupabase();
     setLoading(true);
@@ -325,14 +352,16 @@ export function DashboardPage() {
       await Promise.all([
         loadEvents(activePeriod.id),
         loadAdjustments(activePeriod.id),
+        loadGoodVoices(),
       ]);
     } else {
       setEvents([]);
       setAdjustments([]);
+      await loadGoodVoices();
     }
 
     setLoading(false);
-  }, [loadAdjustments, loadEvents]);
+  }, [loadAdjustments, loadEvents, loadGoodVoices]);
 
   useEffect(() => {
     void loadDashboard();
@@ -357,6 +386,13 @@ export function DashboardPage() {
         () => {
           setRealtimeStatus("connected");
           void loadEvents(period.id);
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "chatwork_good_voices" },
+        () => {
+          void loadGoodVoices();
         },
       )
       .on(
@@ -386,7 +422,7 @@ export function DashboardPage() {
     return () => {
       void client.removeChannel(channel);
     };
-  }, [loadAdjustments, loadEvents, period]);
+  }, [loadAdjustments, loadEvents, loadGoodVoices, period]);
 
   const recentEvents = useMemo(() => events.slice(0, 8), [events]);
   const recentEventIds = useMemo(
@@ -775,6 +811,46 @@ export function DashboardPage() {
           {profile?.display_name || user?.email || "あなた"}さんの今期カウント:
           <strong> {formatNumber(myCount)} </strong>件
         </p>
+      </section>
+
+      <section className="good-voices-panel panel" aria-labelledby="good-voices-title">
+        <div className="panel-title">
+          <MessageSquareQuote aria-hidden="true" />
+          <div>
+            <p className="eyebrow">Customer Voice</p>
+            <h2 id="good-voices-title">お客様のいいお声</h2>
+          </div>
+          <span className="good-voices-count">全 {formatNumber(goodVoices.length)} 件</span>
+        </div>
+        <p className="good-voices-lead">チャットワークで共有された、お客様からのうれしいお声です。</p>
+        {goodVoices.length ? (
+          <>
+            <div className="good-voices-list">
+              {goodVoices.slice(0, 3).map((voice) => (
+                <article className="good-voice-card" key={voice.id}>
+                  <p>{voice.message_body}</p>
+                  <footer>
+                    <span>{voice.author_name || "チャットワーク"}</span>
+                    <time dateTime={voice.sent_at}>{formatDateTime(voice.sent_at)}</time>
+                  </footer>
+                </article>
+              ))}
+            </div>
+            <details className="good-voices-details">
+              <summary>過去のお声をすべて見る（全 {formatNumber(goodVoices.length)} 件）</summary>
+              <div className="good-voices-all-list">
+                {goodVoices.map((voice) => (
+                  <article className="good-voice-row" key={voice.id}>
+                    <p>{voice.message_body}</p>
+                    <span>{voice.author_name || "チャットワーク"} / {formatDateTime(voice.sent_at)}</span>
+                  </article>
+                ))}
+              </div>
+            </details>
+          </>
+        ) : (
+          <p className="empty-row">まだお客様の声は取り込まれていません。</p>
+        )}
       </section>
 
       <section className="stat-grid" aria-label="進捗サマリー">

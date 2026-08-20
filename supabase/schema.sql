@@ -149,6 +149,8 @@ create table if not exists public.chatwork_settings (
   room_id text,
   rooms jsonb not null default '[]'::jsonb
     constraint chatwork_settings_rooms_array_check check (jsonb_typeof(rooms) = 'array'),
+  good_voice_enabled boolean not null default false,
+  good_voice_keywords text[] not null default array['お客様','お声','見えるようになりました','よく見える','改善'],
   enabled boolean not null default false,
   updated_by uuid references public.profiles (id) on delete set null,
   created_at timestamptz not null default now(),
@@ -176,7 +178,26 @@ create table if not exists public.chatwork_monthly_notifications (
 );
 
 alter table public.chatwork_settings
-  add column if not exists rooms jsonb not null default '[]'::jsonb;
+  add column if not exists rooms jsonb not null default '[]'::jsonb,
+  add column if not exists good_voice_enabled boolean not null default false,
+  add column if not exists good_voice_keywords text[] not null default array['お客様','お声','見えるようになりました','よく見える','改善'];
+
+create table if not exists public.chatwork_good_voices (
+  id uuid primary key default gen_random_uuid(),
+  chatwork_message_id text not null unique,
+  room_id text not null,
+  room_name text,
+  author_name text,
+  message_body text not null,
+  sent_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.chatwork_good_voice_sync_state (
+  room_id text primary key,
+  last_message_id text,
+  updated_at timestamptz not null default now()
+);
 
 update public.chatwork_settings
 set rooms = '[]'::jsonb
@@ -282,6 +303,8 @@ create index if not exists chatwork_monthly_notifications_created_idx
   on public.chatwork_monthly_notifications (created_at desc);
 create index if not exists chatwork_monthly_notifications_target_month_idx
   on public.chatwork_monthly_notifications (target_month desc);
+create index if not exists chatwork_good_voices_sent_idx
+  on public.chatwork_good_voices (sent_at desc);
 
 create or replace function app_private.touch_updated_at()
 returns trigger
@@ -405,6 +428,15 @@ alter table public.thank_you_comments enable row level security;
 alter table public.thank_you_adjustments enable row level security;
 alter table public.chatwork_settings enable row level security;
 alter table public.chatwork_monthly_notifications enable row level security;
+alter table public.chatwork_good_voices enable row level security;
+alter table public.chatwork_good_voice_sync_state enable row level security;
+
+drop policy if exists "chatwork_good_voices_select_for_active_users" on public.chatwork_good_voices;
+create policy "chatwork_good_voices_select_for_active_users"
+on public.chatwork_good_voices
+for select
+to authenticated
+using (app_private.current_user_is_active());
 
 drop policy if exists "profiles_select_for_active_users_or_self" on public.profiles;
 create policy "profiles_select_for_active_users_or_self"
@@ -582,6 +614,8 @@ grant select, insert on public.thank_you_comments to authenticated;
 grant select, insert on public.thank_you_adjustments to authenticated;
 revoke all on public.chatwork_settings from anon, authenticated;
 revoke all on public.chatwork_monthly_notifications from anon, authenticated;
+grant select on public.chatwork_good_voices to authenticated;
+revoke all on public.chatwork_good_voice_sync_state from anon, authenticated;
 
 do $$
 begin
@@ -623,6 +657,15 @@ begin
       and tablename = 'thank_you_comments'
   ) then
     alter publication supabase_realtime add table public.thank_you_comments;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'chatwork_good_voices'
+  ) then
+    alter publication supabase_realtime add table public.chatwork_good_voices;
   end if;
 end;
 $$;

@@ -93,3 +93,28 @@ select cron.schedule(
     ) as request_id;
   $$
 );
+
+do $$
+begin
+  if exists (select 1 from cron.job where jobname = 'okiari-chatwork-good-voices') then
+    perform cron.unschedule('okiari-chatwork-good-voices');
+  end if;
+end;
+$$;
+
+-- 5分ごとにChatworkの新着メッセージを確認し、設定キーワードに一致する声を保存する。
+select cron.schedule(
+  'okiari-chatwork-good-voices',
+  '*/5 * * * *',
+  $$
+  select net.http_post(
+    url := (select decrypted_secret from vault.decrypted_secrets where name = 'okiari_project_url') || '/functions/v1/chatwork-notification',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'apikey', (select decrypted_secret from vault.decrypted_secrets where name = 'okiari_service_role_key'),
+      'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'okiari_service_role_key')
+    ),
+    body := jsonb_build_object('action', 'sync-good-voices')
+  ) as request_id;
+  $$
+);

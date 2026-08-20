@@ -8,6 +8,8 @@ type ChatworkSettings = {
   room_id: string | null;
   rooms: unknown;
   enabled: boolean;
+  good_voice_enabled: boolean;
+  good_voice_keywords: string[] | null;
   updated_at: string;
   updated_by: string | null;
 };
@@ -265,6 +267,8 @@ function publicSettings(settings: ChatworkSettings | null) {
     roomId: rooms[0]?.roomId ?? settings?.room_id ?? "",
     rooms,
     tokenConfigured: Boolean(settings?.api_token),
+    goodVoiceEnabled: settings?.good_voice_enabled ?? false,
+    goodVoiceKeywords: settings?.good_voice_keywords ?? [],
     updatedAt: settings?.updated_at ?? null,
   };
 }
@@ -435,6 +439,84 @@ async function postChatworkMessage(
   return parsed as { message_id?: string | number } | null;
 }
 
+type ChatworkIncomingMessage = {
+  message_id?: string | number;
+  account?: { name?: string };
+  body?: string;
+  send_time?: number;
+};
+
+async function fetchChatworkMessages(
+  apiToken: string,
+  roomId: string,
+  lastMessageId: string | null,
+) {
+  const params = new URLSearchParams({ force: "1" });
+  if (lastMessageId) params.set("start_from", lastMessageId);
+  const response = await fetch(
+    `https://api.chatwork.com/v2/rooms/${roomId}/messages?${params.toString()}`,
+    { headers: { "x-chatworktoken": apiToken } },
+  );
+  const text = await response.text();
+  let parsed: unknown = null;
+  try { parsed = text ? JSON.parse(text) : null; } catch { parsed = text; }
+  if (!response.ok) {
+    throw new HttpError(`Chatworkメッセージ取得に失敗しました。(${response.status})`, 502);
+  }
+  return Array.isArray(parsed) ? parsed as ChatworkIncomingMessage[] : [];
+}
+
+function isGoodVoice(body: string, keywords: string[]) {
+  const normalized = body.replace(/\s/g, "");
+  return keywords.some((keyword) => keyword.trim() && normalized.includes(keyword.replace(/\s/g, "")));
+}
+
+async function syncGoodVoices(admin: SupabaseAdmin) {
+  const settings = await loadSettings(admin);
+  if (!settings?.good_voice_enabled || !settings.api_token) {
+    return { ok: true, imported: 0, skipped: "disabled" };
+  }
+  const rooms = enabledRoomsForSettings(settings);
+  const keywords = (settings.good_voice_keywords ?? []).filter(Boolean);
+  let imported = 0;
+
+  for (const room of rooms) {
+    const { data: state } = await admin
+      .from("chatwork_good_voice_sync_state")
+      .select("last_message_id")
+      .eq("room_id", room.roomId)
+      .maybeSingle();
+    const messages = await fetchChatworkMessages(settings.api_token, room.roomId, state?.last_message_id ?? null);
+    let newestMessageId = state?.last_message_id ?? null;
+
+    for (const message of messages) {
+      const messageId = message.message_id ? String(message.message_id) : "";
+      const body = cleanText(message.body);
+      if (!messageId) continue;
+      newestMessageId = messageId;
+      if (!body || !isGoodVoice(body, keywords)) continue;
+      const { error } = await admin.from("chatwork_good_voices").upsert({
+        chatwork_message_id: messageId,
+        room_id: room.roomId,
+        room_name: room.name,
+        author_name: cleanText(message.account?.name) || null,
+        message_body: body,
+        sent_at: message.send_time ? new Date(message.send_time * 1000).toISOString() : new Date().toISOString(),
+      }, { onConflict: "chatwork_message_id", ignoreDuplicates: true });
+      if (!error) imported += 1;
+    }
+
+    if (newestMessageId) {
+      await admin.from("chatwork_good_voice_sync_state").upsert({
+        room_id: room.roomId,
+        last_message_id: newestMessageId,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "room_id" });
+    }
+  }
+  return { ok: true, imported };
+}
+
 async function settingsResponse(admin: SupabaseAdmin, targetMonthValue?: string) {
   const [settings, preview, lastNotifications] = await Promise.all([
     loadSettings(admin),
@@ -471,6 +553,10 @@ async function saveSettings(
   const duplicates = duplicateRoomIds(rooms);
   const roomId = enabledRooms[0]?.roomId ?? rooms[0]?.roomId ?? "";
   const enabled = body.enabled === true;
+  const goodVoiceEnabled = body.goodVoiceEnabled === true;
+  const goodVoiceKeywords = Array.isArray(body.goodVoiceKeywords)
+    ? body.goodVoiceKeywords.map(cleanText).filter(Boolean).slice(0, 20)
+    : current?.good_voice_keywords ?? [];
   const nextToken = body.clearToken === true ? null : apiToken || current?.api_token || null;
 
   if (enabled && !nextToken) {
@@ -494,6 +580,8 @@ async function saveSettings(
         room_id: roomId || null,
         rooms,
         enabled,
+        good_voice_enabled: goodVoiceEnabled,
+        good_voice_keywords: goodVoiceKeywords,
         updated_by: callerId,
       },
       { onConflict: "id" },
@@ -703,6 +791,10 @@ Deno.serve(async (req) => {
   try {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const action = cleanText(body.action);
+
+    if (action === "sync-good-voices" && isSecretRequest(req, secretKey)) {
+      return json(await syncGoodVoices(admin));
+    }
 
     if (action === "send-monthly" && isSecretRequest(req, secretKey)) {
       return json(

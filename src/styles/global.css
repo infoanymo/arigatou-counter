@@ -1335,6 +1335,93 @@ textarea {
   background: #f7fafc;
 }
 
+.good-voices-panel {
+  margin-top: 20px;
+  background: linear-gradient(135deg, #fffdf6, #ffffff 70%);
+}
+
+.good-voices-panel .panel-title {
+  align-items: center;
+}
+
+.good-voices-panel .panel-title > svg {
+  color: #c78d16;
+}
+
+.good-voices-count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.good-voices-lead {
+  margin: 12px 0 16px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.good-voices-list {
+  display: grid;
+  gap: 10px;
+}
+
+.good-voice-card,
+.good-voice-row {
+  border: 1px solid rgba(199, 141, 22, 0.2);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.good-voice-card {
+  padding: 14px 16px;
+}
+
+.good-voice-card p,
+.good-voice-row p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+
+.good-voice-card footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.good-voices-details {
+  margin-top: 14px;
+}
+
+.good-voices-details summary {
+  cursor: pointer;
+  color: var(--accent, #002d55);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.good-voices-all-list {
+  display: grid;
+  gap: 8px;
+  max-height: 520px;
+  margin-top: 12px;
+  overflow: auto;
+}
+
+.good-voice-row {
+  padding: 11px 14px;
+}
+
+.good-voice-row span {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
 .community-post-heading {
   display: flex;
   align-items: center;

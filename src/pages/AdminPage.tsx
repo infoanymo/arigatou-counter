@@ -119,6 +119,8 @@ type ChatworkSettings = {
   rooms: ChatworkRoomSettings[];
   tokenConfigured: boolean;
   updatedAt: string | null;
+  goodVoiceEnabled: boolean;
+  goodVoiceKeywords: string[];
 };
 
 type ChatworkRoomSettings = {
@@ -426,6 +428,8 @@ export function AdminPage({ section }: { section: AdminSection }) {
     createChatworkRoom(),
   ]);
   const [chatworkEnabled, setChatworkEnabled] = useState(false);
+  const [goodVoiceEnabled, setGoodVoiceEnabled] = useState(false);
+  const [goodVoiceKeywords, setGoodVoiceKeywords] = useState("お客様,お声,見えるようになりました,よく見える,改善");
   const [savingChatwork, setSavingChatwork] = useState(false);
   const [sendingChatwork, setSendingChatwork] = useState<"test" | "monthly" | null>(
     null,
@@ -654,6 +658,8 @@ export function AdminPage({ section }: { section: AdminSection }) {
       );
       setChatworkRooms(normalizeChatworkRooms(response.settings.rooms));
       setChatworkEnabled(response.settings.enabled);
+      setGoodVoiceEnabled(response.settings.goodVoiceEnabled);
+      setGoodVoiceKeywords(response.settings.goodVoiceKeywords.join(","));
       setChatworkApiToken("");
     } catch (error) {
       setMessage(
@@ -861,6 +867,8 @@ export function AdminPage({ section }: { section: AdminSection }) {
           enabled: room.enabled,
         })),
         enabled: chatworkEnabled,
+        goodVoiceEnabled,
+        goodVoiceKeywords: goodVoiceKeywords.split(",").map((keyword) => keyword.trim()).filter(Boolean),
       });
       setMessage("チャットワーク連携を保存しました。");
       await loadChatwork();
@@ -1360,6 +1368,25 @@ export function AdminPage({ section }: { section: AdminSection }) {
                 />
                 <span>月次通知を有効にする</span>
               </label>
+              <div className="chatwork-good-voice-config">
+                <label className="checkbox-field">
+                  <input
+                    checked={goodVoiceEnabled}
+                    onChange={(event) => setGoodVoiceEnabled(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>「いいお声」の自動取込を有効にする</span>
+                </label>
+                <label>
+                  <span>取込キーワード（カンマ区切り）</span>
+                  <input
+                    onChange={(event) => setGoodVoiceKeywords(event.target.value)}
+                    placeholder="お客様,お声,見えるようになりました"
+                    value={goodVoiceKeywords}
+                  />
+                </label>
+                <p className="form-help">対象ルームの本文にいずれかのキーワードを含むメッセージを、定期実行で取り込みます。</p>
+              </div>
               <div className="chatwork-room-list">
                 {chatworkRooms.map((room, index) => (
                   <section className="chatwork-room-config" key={room.id}>
