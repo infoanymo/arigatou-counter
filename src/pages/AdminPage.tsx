@@ -167,6 +167,18 @@ type ChatworkSettingsResponse = {
   preview: ChatworkPreview;
   lastNotification: ChatworkNotification | null;
   lastNotifications?: ChatworkNotification[];
+  manualGoodVoices?: ManualGoodVoice[];
+};
+
+type ManualGoodVoice = {
+  id: string;
+  chatwork_message_id: string | null;
+  room_id: string;
+  room_name: string | null;
+  author_name: string | null;
+  message_body: string;
+  sent_at: string;
+  created_at: string;
 };
 
 const planLabels = {
@@ -439,6 +451,12 @@ export function AdminPage({ section }: { section: AdminSection }) {
   const [manualGoodVoiceAuthor, setManualGoodVoiceAuthor] = useState("");
   const [manualGoodVoiceDate, setManualGoodVoiceDate] = useState(today);
   const [addingManualGoodVoice, setAddingManualGoodVoice] = useState(false);
+  const [manualGoodVoices, setManualGoodVoices] = useState<ManualGoodVoice[]>([]);
+  const [manualGoodVoiceToDelete, setManualGoodVoiceToDelete] =
+    useState<ManualGoodVoice | null>(null);
+  const [deletingManualGoodVoiceId, setDeletingManualGoodVoiceId] = useState<
+    string | null
+  >(null);
   const [savingChatwork, setSavingChatwork] = useState(false);
   const [sendingChatwork, setSendingChatwork] = useState<"test" | "monthly" | null>(
     null,
@@ -670,6 +688,7 @@ export function AdminPage({ section }: { section: AdminSection }) {
       setChatworkEnabled(response.settings.enabled);
       setGoodVoiceEnabled(response.settings.goodVoiceEnabled);
       setGoodVoiceKeywords(response.settings.goodVoiceKeywords.join(","));
+      setManualGoodVoices(response.manualGoodVoices ?? []);
       setChatworkApiToken("");
     } catch (error) {
       setMessage(
@@ -932,10 +951,32 @@ export function AdminPage({ section }: { section: AdminSection }) {
       setManualGoodVoiceAuthor("");
       setManualGoodVoiceDate(today);
       setMessage("いいお声を追加しました。");
+      await loadChatwork();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "いいお声を追加できませんでした。");
     } finally {
       setAddingManualGoodVoice(false);
+    }
+  }
+
+  async function handleDeleteManualGoodVoice() {
+    if (!manualGoodVoiceToDelete || deletingManualGoodVoiceId) return;
+    const target = manualGoodVoiceToDelete;
+    setDeletingManualGoodVoiceId(target.id);
+    setMessage(null);
+
+    try {
+      await invokeChatwork({
+        action: "delete-manual-good-voice",
+        id: target.id,
+      });
+      setManualGoodVoices((voices) => voices.filter((voice) => voice.id !== target.id));
+      setManualGoodVoiceToDelete(null);
+      setMessage("いいお声を削除しました。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "いいお声を削除できませんでした。");
+    } finally {
+      setDeletingManualGoodVoiceId(null);
     }
   }
 
@@ -1584,6 +1625,40 @@ export function AdminPage({ section }: { section: AdminSection }) {
                 {addingManualGoodVoice ? "追加中..." : "いいお声を追加"}
               </button>
             </form>
+            <div className="manual-good-voice-history">
+              <div className="subsection-heading">
+                <div>
+                  <p className="eyebrow">Manual history</p>
+                  <h3>手動で追加したお声</h3>
+                </div>
+                <span>{formatNumber(manualGoodVoices.length)}件</span>
+              </div>
+              {manualGoodVoices.length ? (
+                <div className="manual-good-voice-list">
+                  {manualGoodVoices.map((voice) => (
+                    <article className="manual-good-voice-row" key={voice.id}>
+                      <div className="manual-good-voice-content">
+                        <p>{voice.message_body}</p>
+                        <span>
+                          {voice.author_name || "お客様"} / {formatDateTime(voice.sent_at)}
+                        </span>
+                      </div>
+                      <button
+                        className="button button-danger manual-good-voice-delete"
+                        disabled={deletingManualGoodVoiceId === voice.id}
+                        onClick={() => setManualGoodVoiceToDelete(voice)}
+                        type="button"
+                      >
+                        <Trash2 aria-hidden="true" />
+                        {deletingManualGoodVoiceId === voice.id ? "削除中..." : "削除"}
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="form-help">手動で追加したお声はまだありません。</p>
+              )}
+            </div>
           </article>
 
           <article className="panel chatwork-panel">
@@ -1908,6 +1983,48 @@ export function AdminPage({ section }: { section: AdminSection }) {
                 {deletingThankYouEventId === thankYouEventToDelete.id
                   ? "削除中..."
                   : "削除する"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {manualGoodVoiceToDelete ? (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            className="confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-manual-good-voice-title"
+          >
+            <div className="confirm-icon">
+              <TriangleAlert aria-hidden="true" />
+            </div>
+            <div>
+              <p className="eyebrow">Delete</p>
+              <h2 id="delete-manual-good-voice-title">このお声を削除しますか？</h2>
+              <p>削除後は管理画面とダッシュボードから表示されなくなります。</p>
+              <p className="manual-good-voice-delete-preview">
+                {manualGoodVoiceToDelete.message_body}
+              </p>
+            </div>
+            <div className="confirm-modal-actions">
+              <button
+                className="button button-secondary"
+                disabled={Boolean(deletingManualGoodVoiceId)}
+                onClick={() => setManualGoodVoiceToDelete(null)}
+                type="button"
+              >
+                キャンセル
+              </button>
+              <button
+                className="button button-danger"
+                disabled={Boolean(deletingManualGoodVoiceId)}
+                onClick={() => void handleDeleteManualGoodVoice()}
+                type="button"
+              >
+                <Trash2 aria-hidden="true" />
+                {deletingManualGoodVoiceId ? "削除中..." : "削除する"}
               </button>
             </div>
           </section>

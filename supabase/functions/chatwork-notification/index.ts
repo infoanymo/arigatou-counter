@@ -564,11 +564,44 @@ async function addManualGoodVoice(
   return { voice: data };
 }
 
+async function listManualGoodVoices(admin: SupabaseAdmin) {
+  const { data, error } = await admin
+    .from("chatwork_good_voices")
+    .select("id,chatwork_message_id,room_id,room_name,author_name,message_body,sent_at,created_at")
+    .eq("room_id", "manual")
+    .order("sent_at", { ascending: false })
+    .limit(5000);
+
+  if (error) throw new HttpError(error.message, 500);
+  return data ?? [];
+}
+
+async function deleteManualGoodVoice(
+  admin: SupabaseAdmin,
+  body: Record<string, unknown>,
+) {
+  const id = cleanText(body.id);
+  if (!id) throw new HttpError("削除対象のお声が指定されていません。", 400);
+
+  const { data, error } = await admin
+    .from("chatwork_good_voices")
+    .delete()
+    .eq("id", id)
+    .eq("room_id", "manual")
+    .select("id")
+    .maybeSingle();
+
+  if (error) throw new HttpError(error.message, 400);
+  if (!data) throw new HttpError("削除対象のお声が見つかりません。", 404);
+  return { ok: true, id: data.id };
+}
+
 async function settingsResponse(admin: SupabaseAdmin, targetMonthValue?: string) {
-  const [settings, preview, lastNotifications] = await Promise.all([
+  const [settings, preview, lastNotifications, manualGoodVoices] = await Promise.all([
     loadSettings(admin),
     buildReportSummary(admin, targetMonthValue),
     loadRecentNotifications(admin),
+    listManualGoodVoices(admin),
   ]);
   const rooms = enabledRoomsForSettings(settings);
   const messages = buildRoomMessages(
@@ -585,6 +618,7 @@ async function settingsResponse(admin: SupabaseAdmin, targetMonthValue?: string)
     },
     lastNotification: lastNotifications[0] ?? null,
     lastNotifications,
+    manualGoodVoices,
   };
 }
 
@@ -867,6 +901,10 @@ Deno.serve(async (req) => {
 
     if (action === "add-manual-good-voice") {
       return json(await addManualGoodVoice(admin, body));
+    }
+
+    if (action === "delete-manual-good-voice") {
+      return json(await deleteManualGoodVoice(admin, body));
     }
 
     if (action === "send-test") {

@@ -2174,6 +2174,68 @@ textarea {
   gap: 22px;
 }
 
+.manual-good-voice-history {
+  display: grid;
+  gap: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+}
+
+.manual-good-voice-list {
+  display: grid;
+  gap: 10px;
+}
+
+.manual-good-voice-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  padding: 14px;
+}
+
+.manual-good-voice-content {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.manual-good-voice-content p,
+.manual-good-voice-delete-preview {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.7;
+}
+
+.manual-good-voice-content span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.manual-good-voice-delete {
+  flex: 0 0 auto;
+}
+
+.manual-good-voice-delete-preview {
+  border-left: 3px solid var(--teal);
+  background: rgba(0, 45, 85, 0.05);
+  padding: 10px 12px;
+}
+
+@media (max-width: 640px) {
+  .manual-good-voice-row {
+    display: grid;
+  }
+
+  .manual-good-voice-delete {
+    justify-self: start;
+  }
+}
+
 .checkbox-field {
   display: inline-flex;
   width: fit-content;
