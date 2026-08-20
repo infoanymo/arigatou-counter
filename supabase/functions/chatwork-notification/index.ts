@@ -568,9 +568,9 @@ async function listManualGoodVoices(admin: SupabaseAdmin) {
   const { data, error } = await admin
     .from("chatwork_good_voices")
     .select("id,chatwork_message_id,room_id,room_name,author_name,message_body,sent_at")
-    // Older hand-entered records may predate the `room_id = manual` marker.
     // A null Chatwork message id is the durable signal that the record was not imported.
-    .or("room_id.eq.manual,chatwork_message_id.is.null")
+    // This also includes manual records created before the `room_id = manual` marker.
+    .is("chatwork_message_id", null)
     .order("sent_at", { ascending: false })
     .limit(5000);
 
@@ -599,12 +599,19 @@ async function deleteManualGoodVoice(
 }
 
 async function settingsResponse(admin: SupabaseAdmin, targetMonthValue?: string) {
-  const [settings, preview, lastNotifications, manualGoodVoices] = await Promise.all([
+  const [settings, preview, lastNotifications] = await Promise.all([
     loadSettings(admin),
     buildReportSummary(admin, targetMonthValue),
     loadRecentNotifications(admin),
-    listManualGoodVoices(admin),
   ]);
+  let manualGoodVoices: Awaited<ReturnType<typeof listManualGoodVoices>> = [];
+  try {
+    manualGoodVoices = await listManualGoodVoices(admin);
+  } catch (error) {
+    // A legacy schema issue must not prevent the rest of the Chatwork settings page
+    // from loading. The function logs the underlying error for diagnosis.
+    console.error("Failed to load manual good voices", error);
+  }
   const rooms = enabledRoomsForSettings(settings);
   const messages = buildRoomMessages(
     preview,
