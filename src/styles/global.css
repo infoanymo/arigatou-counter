@@ -1433,6 +1433,7 @@ textarea {
 
 .good-voice-card p,
 .good-voice-row p {
+  font-weight: 800;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   line-height: 1.7;
@@ -1475,6 +1476,16 @@ textarea {
   margin-top: 6px;
   color: var(--muted);
   font-size: 0.76rem;
+}
+
+.date-picker-input {
+  color-scheme: light;
+  cursor: pointer;
+}
+
+.date-picker-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.72;
 }
 
 .community-post-heading {

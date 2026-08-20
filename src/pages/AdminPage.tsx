@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   Calculator,
@@ -450,6 +450,7 @@ export function AdminPage({ section }: { section: AdminSection }) {
   const [manualGoodVoiceBody, setManualGoodVoiceBody] = useState("");
   const [manualGoodVoiceAuthor, setManualGoodVoiceAuthor] = useState("");
   const [manualGoodVoiceDate, setManualGoodVoiceDate] = useState(today);
+  const manualGoodVoiceDateInputRef = useRef<HTMLInputElement>(null);
   const [addingManualGoodVoice, setAddingManualGoodVoice] = useState(false);
   const [manualGoodVoices, setManualGoodVoices] = useState<ManualGoodVoice[]>([]);
   const [manualGoodVoiceToDelete, setManualGoodVoiceToDelete] =
@@ -1617,7 +1618,15 @@ export function AdminPage({ section }: { section: AdminSection }) {
                 </label>
                 <label>
                   <span>発生日</span>
-                  <input onChange={(event) => setManualGoodVoiceDate(event.target.value)} required type="date" value={manualGoodVoiceDate} />
+                  <input
+                    className="date-picker-input"
+                    onChange={(event) => setManualGoodVoiceDate(event.target.value)}
+                    onClick={(event) => event.currentTarget.showPicker?.()}
+                    ref={manualGoodVoiceDateInputRef}
+                    required
+                    type="date"
+                    value={manualGoodVoiceDate}
+                  />
                 </label>
               </div>
               <button className="button button-primary" disabled={addingManualGoodVoice} type="submit">

@@ -568,7 +568,9 @@ async function listManualGoodVoices(admin: SupabaseAdmin) {
   const { data, error } = await admin
     .from("chatwork_good_voices")
     .select("id,chatwork_message_id,room_id,room_name,author_name,message_body,sent_at,created_at")
-    .eq("room_id", "manual")
+    // Older hand-entered records may predate the `room_id = manual` marker.
+    // A null Chatwork message id is the durable signal that the record was not imported.
+    .or("room_id.eq.manual,chatwork_message_id.is.null")
     .order("sent_at", { ascending: false })
     .limit(5000);
 
@@ -587,7 +589,7 @@ async function deleteManualGoodVoice(
     .from("chatwork_good_voices")
     .delete()
     .eq("id", id)
-    .eq("room_id", "manual")
+    .is("chatwork_message_id", null)
     .select("id")
     .maybeSingle();
 
