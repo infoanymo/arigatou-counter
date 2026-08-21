@@ -87,6 +87,9 @@ type ReactionWithProfile = {
 };
 
 type RealtimeStatus = "connecting" | "connected" | "disconnected";
+type RankingEvent = Pick<ThankYouEvent, "user_id" | "created_at">;
+
+const EVENT_PAGE_SIZE = 20;
 
 function reducedMotion() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -112,6 +115,10 @@ export function DashboardPage() {
   const { user, profile } = useAuth();
   const [period, setPeriod] = useState<Period | null>(null);
   const [events, setEvents] = useState<EventWithProfile[]>([]);
+  const [rankingEvents, setRankingEvents] = useState<RankingEvent[]>([]);
+  const [eventTotalCount, setEventTotalCount] = useState(0);
+  const [historyTotalCount, setHistoryTotalCount] = useState(0);
+  const [myEventCount, setMyEventCount] = useState(0);
   const [adjustments, setAdjustments] = useState<ThankYouAdjustment[]>([]);
   const [goodVoices, setGoodVoices] = useState<GoodVoice[]>([]);
   const [likesByEvent, setLikesByEvent] = useState<
@@ -129,7 +136,7 @@ export function DashboardPage() {
     Record<string, CommentWithProfile[]>
   >({});
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
-  const [showAllEvents, setShowAllEvents] = useState(false);
+  const [loadingMoreEvents, setLoadingMoreEvents] = useState(false);
   const [postDraft, setPostDraft] = useState("");
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editPostDraft, setEditPostDraft] = useState("");
@@ -243,25 +250,82 @@ export function DashboardPage() {
 
   const loadEvents = useCallback(async (periodId: string) => {
     const client = getSupabase();
-    const { data, error: eventsError } = await client
-      .from("thank_you_events")
-      .select(
-        "id, period_id, user_id, kind, message, created_at, profiles:profiles!thank_you_events_user_id_fkey(display_name,email,company_name,avatar_url,avatar_scale)",
-      )
-      .eq("period_id", periodId)
-      .order("created_at", { ascending: false })
-      .limit(5000)
-      .returns<EventWithProfile[]>();
+    const [eventsResult, countResult, thankYouCountResult, rankingResult, myCountResult] = await Promise.all([
+      client
+        .from("thank_you_events")
+        .select(
+          "id, period_id, user_id, kind, message, created_at, profiles:profiles!thank_you_events_user_id_fkey(display_name,email,company_name,avatar_url,avatar_scale)",
+        )
+        .eq("period_id", periodId)
+        .order("created_at", { ascending: false })
+        .range(0, EVENT_PAGE_SIZE - 1)
+        .returns<EventWithProfile[]>(),
+      client
+        .from("thank_you_events")
+        .select("id", { count: "exact", head: true })
+        .eq("period_id", periodId),
+      client
+        .from("thank_you_events")
+        .select("id", { count: "exact", head: true })
+        .eq("period_id", periodId)
+        .eq("kind", "thank_you"),
+      client
+        .from("thank_you_events")
+        .select("user_id,created_at")
+        .eq("period_id", periodId)
+        .eq("kind", "thank_you")
+        .order("created_at", { ascending: false })
+        .limit(20000)
+        .returns<RankingEvent[]>(),
+      client
+        .from("thank_you_events")
+        .select("id", { count: "exact", head: true })
+        .eq("period_id", periodId)
+        .eq("kind", "thank_you")
+        .eq("user_id", user?.id ?? ""),
+    ]);
 
-    if (eventsError) {
+    if (
+      eventsResult.error ||
+      countResult.error ||
+      thankYouCountResult.error ||
+      rankingResult.error ||
+      myCountResult.error
+    ) {
       setError("ありがとう履歴を読み込めませんでした。");
       return;
     }
 
-    const nextEvents = data ?? [];
+    const nextEvents = eventsResult.data ?? [];
     setEvents(nextEvents);
-    await loadInteractions(nextEvents.slice(0, 8).map((event) => event.id));
-  }, [loadInteractions]);
+    setRankingEvents(rankingResult.data ?? []);
+    setHistoryTotalCount(countResult.count ?? 0);
+    setEventTotalCount(thankYouCountResult.count ?? 0);
+    setMyEventCount(myCountResult.count ?? 0);
+    await loadInteractions(nextEvents.map((event) => event.id));
+  }, [loadInteractions, user?.id]);
+
+  const loadMoreEvents = useCallback(async () => {
+    if (!period || loadingMoreEvents || events.length >= historyTotalCount) return;
+
+    setLoadingMoreEvents(true);
+    const { data, error: eventsError } = await getSupabase()
+      .from("thank_you_events")
+      .select(
+        "id, period_id, user_id, kind, message, created_at, profiles:profiles!thank_you_events_user_id_fkey(display_name,email,company_name,avatar_url,avatar_scale)",
+      )
+      .eq("period_id", period.id)
+      .order("created_at", { ascending: false })
+      .range(events.length, events.length + EVENT_PAGE_SIZE - 1)
+      .returns<EventWithProfile[]>();
+
+    if (eventsError) {
+      setError("過去のありがとうを読み込めませんでした。");
+    } else {
+      setEvents((current) => [...current, ...(data ?? [])]);
+    }
+    setLoadingMoreEvents(false);
+  }, [events.length, historyTotalCount, loadingMoreEvents, period]);
 
   const loadAdjustments = useCallback(async (periodId: string) => {
     const client = getSupabase();
@@ -285,7 +349,7 @@ export function DashboardPage() {
       .from("chatwork_good_voices")
       .select("id,chatwork_message_id,room_id,room_name,author_name,message_body,sent_at")
       .order("sent_at", { ascending: false })
-      .limit(5000)
+      .limit(50)
       .returns<GoodVoice[]>();
     if (voicesError) {
       setError("お客様の声を読み込めませんでした。");
@@ -323,6 +387,10 @@ export function DashboardPage() {
       ]);
     } else {
       setEvents([]);
+      setRankingEvents([]);
+      setEventTotalCount(0);
+      setHistoryTotalCount(0);
+      setMyEventCount(0);
       setAdjustments([]);
       await loadGoodVoices();
     }
@@ -391,8 +459,7 @@ export function DashboardPage() {
     };
   }, [loadAdjustments, loadEvents, loadGoodVoices, period]);
 
-  const recentEvents = useMemo(() => events.slice(0, 8), [events]);
-  const displayedEvents = showAllEvents ? events : recentEvents;
+  const displayedEvents = events;
   const recentEventIds = useMemo(
     () => displayedEvents.map((event) => event.id),
     [displayedEvents],
@@ -426,29 +493,20 @@ export function DashboardPage() {
     };
   }, [loadInteractions, period, recentEventIds, recentEventKey]);
 
-  useEffect(() => {
-    if (!showAllEvents) return;
-    void loadInteractions(events.map((event) => event.id));
-  }, [events, loadInteractions, showAllEvents]);
-
   const thankYouEvents = useMemo(
-    () => events.filter((event) => event.kind === "thank_you"),
-    [events],
+    () => rankingEvents,
+    [rankingEvents],
   );
-  const eventTotal = thankYouEvents.length;
   const adjustmentTotal = useMemo(
     () => adjustments.reduce((sum, item) => sum + item.delta, 0),
     [adjustments],
   );
-  const total = Math.max(0, eventTotal + adjustmentTotal);
+  const total = Math.max(0, eventTotalCount + adjustmentTotal);
   // The total is derived from the latest event list and adjustments. Rendering
   // it directly prevents an interrupted number animation from leaving a stale
   // value on screen after a quick insert/reload sequence.
   const totalDisplay = total;
-  const myCount = useMemo(
-    () => thankYouEvents.filter((event) => event.user_id === user?.id).length,
-    [thankYouEvents, user?.id],
-  );
+  const myCount = myEventCount;
   const progress = period ? Math.min(100, (total / period.target_count) * 100) : 0;
   const roundedProgress = Math.round(progress);
   const progressDegrees = Math.round((progress / 100) * 360);
@@ -469,6 +527,7 @@ export function DashboardPage() {
     >();
 
     for (const event of thankYouEvents) {
+      const profileEvent = events.find((candidate) => candidate.user_id === event.user_id);
       const current = result.get(event.user_id);
       if (current) {
         current.count += 1;
@@ -476,11 +535,11 @@ export function DashboardPage() {
       } else {
         result.set(event.user_id, {
           userId: event.user_id,
-          name: nameForEvent(event),
-          email: event.profiles?.email ?? undefined,
-          companyName: event.profiles?.company_name ?? undefined,
-          avatarUrl: event.profiles?.avatar_url ?? undefined,
-          avatarScale: event.profiles?.avatar_scale ?? undefined,
+          name: profileEvent ? nameForEvent(profileEvent) : "メンバー",
+          email: profileEvent?.profiles?.email ?? undefined,
+          companyName: profileEvent?.profiles?.company_name ?? undefined,
+          avatarUrl: profileEvent?.profiles?.avatar_url ?? undefined,
+          avatarScale: profileEvent?.profiles?.avatar_scale ?? undefined,
           count: 1,
           lastAt: event.created_at,
         });
@@ -500,7 +559,7 @@ export function DashboardPage() {
       previousRank = rank;
       return { ...entry, rank };
     });
-  }, [thankYouEvents]);
+  }, [events, thankYouEvents]);
 
   function runCelebration() {
     const variant = (celebrationVariant.current + 1 + Math.floor(Math.random() * 3)) % 4;
@@ -1196,16 +1255,16 @@ export function DashboardPage() {
               </div>
             ) : null}
           </div>
-          {events.length > recentEvents.length ? (
+          {events.length < historyTotalCount ? (
             <button
               className="history-toggle"
-              onClick={() => setShowAllEvents((current) => !current)}
+              onClick={() => void loadMoreEvents()}
+              disabled={loadingMoreEvents}
               type="button"
-              aria-expanded={showAllEvents}
             >
-              {showAllEvents
-                ? "直近8件に戻す"
-                : `過去のありがとうをすべて見る（全${formatNumber(events.length)}件）`}
+              {loadingMoreEvents
+                ? "読み込み中..."
+                : `過去のありがとうを読み込む（全${formatNumber(historyTotalCount)}件）`}
             </button>
           ) : null}
         </article>
