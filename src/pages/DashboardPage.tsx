@@ -88,40 +88,6 @@ type ReactionWithProfile = {
 
 type RealtimeStatus = "connecting" | "connected" | "disconnected";
 
-function useAnimatedNumber(value: number) {
-  const [displayValue, setDisplayValue] = useState(value);
-  const previous = useRef(value);
-
-  useEffect(() => {
-    const start = previous.current;
-    previous.current = value;
-
-    if (start === value) {
-      setDisplayValue(value);
-      return undefined;
-    }
-
-    const startAt = performance.now();
-    const duration = 650;
-    let frame = 0;
-
-    function tick(now: number) {
-      const progress = Math.min(1, (now - startAt) / duration);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplayValue(Math.round(start + (value - start) * eased));
-
-      if (progress < 1) {
-        frame = requestAnimationFrame(tick);
-      }
-    }
-
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [value]);
-
-  return displayValue;
-}
-
 function reducedMotion() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
@@ -475,7 +441,10 @@ export function DashboardPage() {
     [adjustments],
   );
   const total = Math.max(0, eventTotal + adjustmentTotal);
-  const totalDisplay = useAnimatedNumber(total);
+  // The total is derived from the latest event list and adjustments. Rendering
+  // it directly prevents an interrupted number animation from leaving a stale
+  // value on screen after a quick insert/reload sequence.
+  const totalDisplay = total;
   const myCount = useMemo(
     () => thankYouEvents.filter((event) => event.user_id === user?.id).length,
     [thankYouEvents, user?.id],
