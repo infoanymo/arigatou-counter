@@ -158,6 +158,7 @@ export function DashboardPage() {
   >([]);
   const burstId = useRef(0);
   const celebrationVariant = useRef(-1);
+  const eventLoadRequestId = useRef(0);
 
   const loadInteractions = useCallback(
     async (eventIds: string[]) => {
@@ -251,6 +252,7 @@ export function DashboardPage() {
   );
 
   const loadEvents = useCallback(async (periodId: string) => {
+    const requestId = ++eventLoadRequestId.current;
     const client = getSupabase();
     const [eventsResult, countResult, thankYouCountResult, rankingResult, myCountResult] = await Promise.all([
       client
@@ -296,9 +298,14 @@ export function DashboardPage() {
       rankingResult.error ||
       myCountResult.error
     ) {
+      if (requestId !== eventLoadRequestId.current) return;
       setError("ありがとう履歴を読み込めませんでした。");
       return;
     }
+
+    // Realtime and the button handler can request the same data at nearly the
+    // same time. Never let an older response overwrite a newer count.
+    if (requestId !== eventLoadRequestId.current) return;
 
     const nextEvents = eventsResult.data ?? [];
     setEvents(nextEvents);
@@ -631,6 +638,12 @@ export function DashboardPage() {
       return;
     }
 
+    // Reflect the successful insert immediately. The guarded reload below
+    // reconciles this optimistic value with the database without allowing a
+    // stale concurrent response to make the total go down.
+    setEventTotalCount((current) => current + 1);
+    setHistoryTotalCount((current) => current + 1);
+    setMyEventCount((current) => current + 1);
     runCelebration();
     await loadEvents(period.id);
     window.setTimeout(() => setSubmitting(false), 450);
