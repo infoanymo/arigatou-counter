@@ -88,6 +88,7 @@ type ReactionWithProfile = {
 
 type RealtimeStatus = "connecting" | "connected" | "disconnected";
 type RankingEvent = Pick<ThankYouEvent, "user_id" | "created_at">;
+type RankingProfile = ProfileSummary & { id: string };
 
 const EVENT_PAGE_SIZE = 20;
 
@@ -116,6 +117,7 @@ export function DashboardPage() {
   const [period, setPeriod] = useState<Period | null>(null);
   const [events, setEvents] = useState<EventWithProfile[]>([]);
   const [rankingEvents, setRankingEvents] = useState<RankingEvent[]>([]);
+  const [rankingProfiles, setRankingProfiles] = useState<Record<string, ProfileSummary>>({});
   const [eventTotalCount, setEventTotalCount] = useState(0);
   const [historyTotalCount, setHistoryTotalCount] = useState(0);
   const [myEventCount, setMyEventCount] = useState(0);
@@ -297,8 +299,27 @@ export function DashboardPage() {
     }
 
     const nextEvents = eventsResult.data ?? [];
+    const rankingCounts = new Map<string, number>();
+    for (const event of rankingResult.data ?? []) {
+      rankingCounts.set(event.user_id, (rankingCounts.get(event.user_id) ?? 0) + 1);
+    }
+    const rankingUserIds = [...rankingCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([userId]) => userId);
+    const { data: profileData } = rankingUserIds.length
+      ? await client
+          .from("profiles")
+          .select("id,display_name,email,company_name,avatar_url,avatar_scale")
+          .in("id", rankingUserIds)
+          .returns<RankingProfile[]>()
+      : { data: [] as RankingProfile[] };
+
     setEvents(nextEvents);
     setRankingEvents(rankingResult.data ?? []);
+    setRankingProfiles(
+      Object.fromEntries((profileData ?? []).map((profile) => [profile.id, profile])),
+    );
     setHistoryTotalCount(countResult.count ?? 0);
     setEventTotalCount(thankYouCountResult.count ?? 0);
     setMyEventCount(myCountResult.count ?? 0);
@@ -388,6 +409,7 @@ export function DashboardPage() {
     } else {
       setEvents([]);
       setRankingEvents([]);
+      setRankingProfiles({});
       setEventTotalCount(0);
       setHistoryTotalCount(0);
       setMyEventCount(0);
@@ -527,7 +549,7 @@ export function DashboardPage() {
     >();
 
     for (const event of thankYouEvents) {
-      const profileEvent = events.find((candidate) => candidate.user_id === event.user_id);
+      const profile = rankingProfiles[event.user_id];
       const current = result.get(event.user_id);
       if (current) {
         current.count += 1;
@@ -535,11 +557,11 @@ export function DashboardPage() {
       } else {
         result.set(event.user_id, {
           userId: event.user_id,
-          name: profileEvent ? nameForEvent(profileEvent) : "メンバー",
-          email: profileEvent?.profiles?.email ?? undefined,
-          companyName: profileEvent?.profiles?.company_name ?? undefined,
-          avatarUrl: profileEvent?.profiles?.avatar_url ?? undefined,
-          avatarScale: profileEvent?.profiles?.avatar_scale ?? undefined,
+          name: profile?.display_name || profile?.email || "メンバー",
+          email: profile?.email ?? undefined,
+          companyName: profile?.company_name ?? undefined,
+          avatarUrl: profile?.avatar_url ?? undefined,
+          avatarScale: profile?.avatar_scale ?? undefined,
           count: 1,
           lastAt: event.created_at,
         });
@@ -559,7 +581,7 @@ export function DashboardPage() {
       previousRank = rank;
       return { ...entry, rank };
     });
-  }, [events, thankYouEvents]);
+  }, [rankingProfiles, thankYouEvents]);
 
   function runCelebration() {
     const variant = (celebrationVariant.current + 1 + Math.floor(Math.random() * 3)) % 4;
