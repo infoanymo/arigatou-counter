@@ -716,6 +716,14 @@ textarea {
   line-height: 0.95;
 }
 
+.hero-copy .hero-total-separator {
+  display: inline-block;
+  margin: 0 0.03em;
+  color: inherit;
+  font-size: 0.5em;
+  line-height: 1;
+}
+
 .hero-copy span {
   color: rgba(255, 255, 255, 0.88);
   font-size: 1rem;

@@ -885,7 +885,17 @@ export function DashboardPage() {
             <HeartHandshake aria-hidden="true" />
             累計ありがとう
           </div>
-          <strong>{formatNumber(totalDisplay)}</strong>
+          <strong className="hero-total">
+            {Array.from(formatNumber(totalDisplay)).map((character, index) =>
+              character === "," ? (
+                <span className="hero-total-separator" key={`separator-${index}`}>
+                  {character}
+                </span>
+              ) : (
+                character
+              ),
+            )}
+          </strong>
           <span>目標 {period ? formatNumber(period.target_count) : "-"} 件</span>
         </div>
         <div className="hero-button-area">
