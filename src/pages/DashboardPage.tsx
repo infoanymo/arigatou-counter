@@ -158,7 +158,6 @@ export function DashboardPage() {
     Record<
       string,
       {
-        count: number;
         reactionCounts: Record<ReactionKey, number>;
         reactionByMe: ReactionKey[];
         reactionUsers: Record<ReactionKey, ProfileSummary[]>;
@@ -227,7 +226,6 @@ export function DashboardPage() {
         eventIds.map((eventId) => [
           eventId,
           {
-            count: 0,
             reactionCounts: emptyReactionCounts(),
             reactionByMe: [],
             reactionUsers: emptyReactionUsers(),
@@ -236,7 +234,6 @@ export function DashboardPage() {
       ) as Record<
         string,
         {
-          count: number;
           reactionCounts: Record<ReactionKey, number>;
           reactionByMe: ReactionKey[];
           reactionUsers: Record<ReactionKey, ProfileSummary[]>;
@@ -245,13 +242,11 @@ export function DashboardPage() {
 
       for (const like of (likesResult.data ?? []) as ReactionWithProfile[]) {
         const current = nextLikes[like.event_id] ?? {
-          count: 0,
           reactionCounts: emptyReactionCounts(),
           reactionByMe: [],
           reactionUsers: emptyReactionUsers(),
         };
         const reaction = like.reaction as ReactionKey;
-        current.count += 1;
         current.reactionCounts[reaction] = (current.reactionCounts[reaction] ?? 0) + 1;
         if (like.profiles) {
           current.reactionUsers[reaction] = [
@@ -1159,7 +1154,7 @@ export function DashboardPage() {
                       aria-label="リアクションを選択"
                       aria-expanded={reactionPickerId === event.id}
                       aria-haspopup="true"
-                      className={`mini-action ${
+                      className={`mini-action reaction-trigger ${
                         likesByEvent[event.id]?.reactionByMe.length ? "active" : ""
                       }`}
                       onClick={() =>
@@ -1170,13 +1165,7 @@ export function DashboardPage() {
                       title="リアクションを選択"
                       type="button"
                     >
-                      <span className="reaction-current">
-                        {REACTION_OPTIONS.find(
-                          (option) =>
-                            likesByEvent[event.id]?.reactionByMe.includes(option.key),
-                        )?.emoji ?? <ThumbsUp aria-hidden="true" />}
-                      </span>
-                      {formatNumber(likesByEvent[event.id]?.count ?? 0)}
+                      <ThumbsUp aria-hidden="true" />
                     </button>
                     {reactionPickerId === event.id ? (
                       <div className="reaction-picker" role="group" aria-label="リアクションを選択">
