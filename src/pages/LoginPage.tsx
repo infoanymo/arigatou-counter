@@ -39,7 +39,15 @@ function clearPasswordSetupUrl() {
 const maxPasswordSetupRecoveryAttempts = 6;
 
 export function LoginPage() {
-  const { user, profile, loading, signIn, setPassword, refreshAuth } = useAuth();
+  const {
+    user,
+    profile,
+    loading,
+    authMessage,
+    signIn,
+    setPassword,
+    refreshAuth,
+  } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState("");
@@ -222,7 +230,9 @@ export function LoginPage() {
                   </button>
                 </span>
               </label>
-              {message ? <p className="form-message">{message}</p> : null}
+              {message || authMessage ? (
+                <p className="form-message">{message ?? authMessage}</p>
+              ) : null}
               <button className="button button-primary" disabled={submitting}>
                 {submitting ? "設定中..." : "利用を開始する"}
               </button>
@@ -258,8 +268,10 @@ export function LoginPage() {
                   value={password}
                 />
               </label>
-              {message ? <p className="form-message">{message}</p> : null}
-              {!message && passwordSetupUnavailable ? (
+              {message || authMessage ? (
+                <p className="form-message">{message ?? authMessage}</p>
+              ) : null}
+              {!message && !authMessage && passwordSetupUnavailable ? (
                 <p className="form-message">
                   招待メールのリンクをもう一度開いてください。
                 </p>

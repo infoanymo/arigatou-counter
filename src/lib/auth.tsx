@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -24,6 +25,32 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const authRequestTimeoutMs = 8_000;
+
+class AuthRequestTimeoutError extends Error {
+  constructor() {
+    super("認証サーバーから応答がありません。時間をおいて再度お試しください。");
+    this.name = "AuthRequestTimeoutError";
+  }
+}
+
+async function withAuthTimeout<T>(operation: PromiseLike<T>): Promise<T> {
+  let timeoutId: number | undefined;
+
+  try {
+    return await Promise.race([
+      Promise.resolve(operation),
+      new Promise<never>((_resolve, reject) => {
+        timeoutId = window.setTimeout(
+          () => reject(new AuthRequestTimeoutError()),
+          authRequestTimeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+  }
+}
 
 function fallbackName(email?: string | null) {
   if (!email) return "メンバー";
@@ -104,22 +131,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(isSupabaseConfigured);
   const [authMessage, setAuthMessage] = useState<string | null>(null);
+  const initializedRef = useRef(false);
+  const profileRequestIdRef = useRef(0);
 
   const loadProfile = useCallback(async (currentUser: User | null) => {
+    const requestId = ++profileRequestIdRef.current;
+
     if (!supabase || !currentUser) {
       setProfile(null);
       return;
     }
 
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", currentUser.id)
-      .maybeSingle();
+    let result;
+    try {
+      result = await withAuthTimeout(
+        supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", currentUser.id)
+          .maybeSingle(),
+      );
+    } catch (error) {
+      if (requestId !== profileRequestIdRef.current) return;
+      setAuthMessage(
+        error instanceof AuthRequestTimeoutError
+          ? error.message
+          : "プロフィール情報を確認できませんでした。",
+      );
+      return;
+    }
+
+    if (requestId !== profileRequestIdRef.current) return;
+    const { data, error } = result;
 
     if (error) {
       setAuthMessage("プロフィール情報を確認できませんでした。");
-      setProfile(null);
       return;
     }
 
@@ -151,31 +197,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     setLoading(true);
-    await recoverNestedHashSession();
+    try {
+      await withAuthTimeout(recoverNestedHashSession());
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+      const {
+        data: { session },
+        error,
+      } = await withAuthTimeout(supabase.auth.getSession());
 
-    if (session) {
-      await supabase.auth.refreshSession();
-    }
+      if (error) throw error;
 
-    const {
-      data: { user: currentUser },
-      error,
-    } = await supabase.auth.getUser();
+      const currentUser = session?.user ?? null;
+      if (!currentUser) {
+        setUser(null);
+        setProfile(null);
+        setAuthMessage(null);
+        return;
+      }
 
-    if (error || !currentUser) {
-      setUser(null);
-      setProfile(null);
+      setUser(currentUser);
+      await loadProfile(currentUser);
+    } catch (error) {
+      setAuthMessage(
+        error instanceof AuthRequestTimeoutError
+          ? error.message
+          : "ログイン状態を確認できませんでした。再度お試しください。",
+      );
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setUser(currentUser);
-    await loadProfile(currentUser);
-    setLoading(false);
   }, [loadProfile]);
 
   useEffect(() => {
@@ -184,7 +234,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return undefined;
     }
 
-    void refreshAuth();
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      void refreshAuth();
+    }
 
     const {
       data: { subscription },
@@ -200,18 +253,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(
     async (email: string, password: string) => {
       if (!supabase) return;
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      setAuthMessage(null);
+      const { data, error } = await withAuthTimeout(
+        supabase.auth.signInWithPassword({
+          email,
+          password,
+        }),
+      );
 
       if (error) {
         throw new Error(error.message);
       }
 
-      await refreshAuth();
+      const currentUser = data.user ?? data.session?.user ?? null;
+      if (!currentUser) {
+        throw new Error("ログイン情報を確認できませんでした。再度お試しください。");
+      }
+
+      setUser(currentUser);
+      await loadProfile(currentUser);
     },
-    [refreshAuth],
+    [loadProfile],
   );
 
   const signOut = useCallback(async () => {
@@ -223,7 +285,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const setPassword = useCallback(async (password: string) => {
     if (!supabase) return;
-    const { error } = await supabase.auth.updateUser({ password });
+    const { error } = await withAuthTimeout(
+      supabase.auth.updateUser({ password }),
+    );
     if (error) {
       throw new Error(error.message);
     }
