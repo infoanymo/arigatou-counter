@@ -87,11 +87,11 @@ type ReactionWithProfile = {
 };
 
 type RealtimeStatus = "connecting" | "connected" | "disconnected";
-type RankingEvent = Pick<ThankYouEvent, "user_id" | "created_at"> & {
-  profiles: ProfileSummary | null;
-};
+type RankingEvent = Pick<ThankYouEvent, "user_id" | "created_at">;
+type RankingProfile = ProfileSummary & { id: string };
 
 const EVENT_PAGE_SIZE = 20;
+const RANKING_PAGE_SIZE = 1000;
 
 function reducedMotion() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -113,11 +113,42 @@ function emptyReactionUsers() {
   ) as unknown as Record<ReactionKey, ProfileSummary[]>;
 }
 
+async function loadRankingEvents(
+  client: ReturnType<typeof getSupabase>,
+  periodId: string,
+  expectedCount: number | null,
+) {
+  const rankingEvents: RankingEvent[] = [];
+  let offset = 0;
+
+  while (expectedCount === null || offset < expectedCount) {
+    const { data, error } = await client
+      .from("thank_you_events")
+      .select("user_id,created_at")
+      .eq("period_id", periodId)
+      .eq("kind", "thank_you")
+      .order("created_at", { ascending: false })
+      .range(offset, offset + RANKING_PAGE_SIZE - 1)
+      .returns<RankingEvent[]>();
+
+    if (error) return { data: null, error };
+
+    const page = data ?? [];
+    rankingEvents.push(...page);
+    offset += page.length;
+
+    if (page.length < RANKING_PAGE_SIZE) break;
+  }
+
+  return { data: rankingEvents, error: null };
+}
+
 export function DashboardPage() {
   const { user, profile } = useAuth();
   const [period, setPeriod] = useState<Period | null>(null);
   const [events, setEvents] = useState<EventWithProfile[]>([]);
   const [rankingEvents, setRankingEvents] = useState<RankingEvent[]>([]);
+  const [rankingProfiles, setRankingProfiles] = useState<Record<string, ProfileSummary>>({});
   const [eventTotalCount, setEventTotalCount] = useState(0);
   const [historyTotalCount, setHistoryTotalCount] = useState(0);
   const [myEventCount, setMyEventCount] = useState(0);
@@ -254,7 +285,7 @@ export function DashboardPage() {
   const loadEvents = useCallback(async (periodId: string) => {
     const requestId = ++eventLoadRequestId.current;
     const client = getSupabase();
-    const [eventsResult, countResult, thankYouCountResult, rankingResult, myCountResult] = await Promise.all([
+    const [eventsResult, countResult, thankYouCountResult, myCountResult] = await Promise.all([
       client
         .from("thank_you_events")
         .select(
@@ -275,16 +306,6 @@ export function DashboardPage() {
         .eq("kind", "thank_you"),
       client
         .from("thank_you_events")
-        .select(
-          "user_id,created_at,profiles:profiles!thank_you_events_user_id_fkey(display_name,email,company_name,avatar_url,avatar_scale)",
-        )
-        .eq("period_id", periodId)
-        .eq("kind", "thank_you")
-        .order("created_at", { ascending: false })
-        .limit(20000)
-        .returns<RankingEvent[]>(),
-      client
-        .from("thank_you_events")
         .select("id", { count: "exact", head: true })
         .eq("period_id", periodId)
         .eq("kind", "thank_you")
@@ -295,13 +316,40 @@ export function DashboardPage() {
       eventsResult.error ||
       countResult.error ||
       thankYouCountResult.error ||
-      rankingResult.error ||
       myCountResult.error
     ) {
       if (requestId !== eventLoadRequestId.current) return;
       setError("ありがとう履歴を読み込めませんでした。");
       return;
     }
+
+    const rankingResult = await loadRankingEvents(
+      client,
+      periodId,
+      thankYouCountResult.count,
+    );
+
+    if (rankingResult.error) {
+      if (requestId !== eventLoadRequestId.current) return;
+      setError("個人ランキングを読み込めませんでした。");
+      return;
+    }
+
+    const rankingCounts = new Map<string, number>();
+    for (const event of rankingResult.data ?? []) {
+      rankingCounts.set(event.user_id, (rankingCounts.get(event.user_id) ?? 0) + 1);
+    }
+    const rankingUserIds = [...rankingCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([userId]) => userId);
+    const { data: profileData } = rankingUserIds.length
+      ? await client
+          .from("profiles")
+          .select("id,display_name,email,company_name,avatar_url,avatar_scale")
+          .in("id", rankingUserIds)
+          .returns<RankingProfile[]>()
+      : { data: [] as RankingProfile[] };
 
     // Realtime and the button handler can request the same data at nearly the
     // same time. Never let an older response overwrite a newer count.
@@ -310,6 +358,9 @@ export function DashboardPage() {
     const nextEvents = eventsResult.data ?? [];
     setEvents(nextEvents);
     setRankingEvents(rankingResult.data ?? []);
+    setRankingProfiles(
+      Object.fromEntries((profileData ?? []).map((profile) => [profile.id, profile])),
+    );
     setHistoryTotalCount(countResult.count ?? 0);
     setEventTotalCount(thankYouCountResult.count ?? 0);
     setMyEventCount(myCountResult.count ?? 0);
@@ -399,6 +450,7 @@ export function DashboardPage() {
     } else {
       setEvents([]);
       setRankingEvents([]);
+      setRankingProfiles({});
       setEventTotalCount(0);
       setHistoryTotalCount(0);
       setMyEventCount(0);
@@ -538,6 +590,7 @@ export function DashboardPage() {
     >();
 
     for (const event of thankYouEvents) {
+      const profile = rankingProfiles[event.user_id];
       const current = result.get(event.user_id);
       if (current) {
         current.count += 1;
@@ -545,11 +598,11 @@ export function DashboardPage() {
       } else {
         result.set(event.user_id, {
           userId: event.user_id,
-          name: event.profiles?.display_name || event.profiles?.email || "メンバー",
-          email: event.profiles?.email ?? undefined,
-          companyName: event.profiles?.company_name ?? undefined,
-          avatarUrl: event.profiles?.avatar_url ?? undefined,
-          avatarScale: event.profiles?.avatar_scale ?? undefined,
+          name: profile?.display_name || profile?.email || "メンバー",
+          email: profile?.email ?? undefined,
+          companyName: profile?.company_name ?? undefined,
+          avatarUrl: profile?.avatar_url ?? undefined,
+          avatarScale: profile?.avatar_scale ?? undefined,
           count: 1,
           lastAt: event.created_at,
         });
@@ -569,7 +622,7 @@ export function DashboardPage() {
       previousRank = rank;
       return { ...entry, rank };
     });
-  }, [thankYouEvents]);
+  }, [rankingProfiles, thankYouEvents]);
 
   function runCelebration() {
     const variant = (celebrationVariant.current + 1 + Math.floor(Math.random() * 3)) % 4;
