@@ -1418,6 +1418,23 @@ textarea {
   padding: 14px 16px;
 }
 
+.good-voice-new-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin: 2px 0 8px;
+  padding: 3px 9px;
+  border: 1px solid rgba(207, 51, 45, 0.2);
+  border-radius: 999px;
+  background: linear-gradient(135deg, #e23f36, #f06b31);
+  box-shadow: 0 4px 10px rgba(207, 51, 45, 0.22);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+  line-height: 1.2;
+}
+
 .good-voice-card::before {
   position: absolute;
   top: 0;
@@ -1477,7 +1494,7 @@ textarea {
   padding: 11px 14px;
 }
 
-.good-voice-row span {
+.good-voice-meta {
   display: block;
   margin-top: 6px;
   color: var(--muted);

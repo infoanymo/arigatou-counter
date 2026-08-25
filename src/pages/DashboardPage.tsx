@@ -92,6 +92,12 @@ type RankingProfile = ProfileSummary & { id: string };
 
 const EVENT_PAGE_SIZE = 20;
 const RANKING_PAGE_SIZE = 1000;
+const GOOD_VOICE_NEW_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+
+function isNewGoodVoice(sentAt: string) {
+  const elapsed = Date.now() - new Date(sentAt).getTime();
+  return elapsed >= 0 && elapsed < GOOD_VOICE_NEW_DURATION_MS;
+}
 
 function reducedMotion() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -955,6 +961,9 @@ export function DashboardPage() {
             <div className="good-voices-list">
               {goodVoices.slice(0, 3).map((voice) => (
                 <article className="good-voice-card" key={voice.id}>
+                  {isNewGoodVoice(voice.sent_at) ? (
+                    <span aria-label="新着" className="good-voice-new-badge">NEW</span>
+                  ) : null}
                   <p>{voice.message_body}</p>
                   <footer>
                     <span>{voice.author_name || "チャットワーク"}</span>
@@ -968,8 +977,11 @@ export function DashboardPage() {
               <div className="good-voices-all-list">
                 {goodVoices.map((voice) => (
                   <article className="good-voice-row" key={voice.id}>
+                    {isNewGoodVoice(voice.sent_at) ? (
+                      <span aria-label="新着" className="good-voice-new-badge">NEW</span>
+                    ) : null}
                     <p>{voice.message_body}</p>
-                    <span>{voice.author_name || "チャットワーク"} / {formatDateTime(voice.sent_at)}</span>
+                    <span className="good-voice-meta">{voice.author_name || "チャットワーク"} / {formatDateTime(voice.sent_at)}</span>
                   </article>
                 ))}
               </div>
