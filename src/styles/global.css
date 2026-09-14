@@ -1464,11 +1464,69 @@ textarea {
 
 .good-voice-card footer {
   display: flex;
+  position: relative;
+  z-index: 1;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-top: 10px;
   color: var(--muted);
   font-size: 0.78rem;
+}
+
+.good-voice-meta-row {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.good-voice-like-button {
+  display: inline-flex;
+  min-height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(199, 141, 22, 0.28);
+  border-radius: 999px;
+  padding: 0 11px;
+  color: #8a6418;
+  background: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.good-voice-like-button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.good-voice-like-button strong {
+  min-width: 1ch;
+  color: inherit;
+}
+
+.good-voice-like-button:hover:not(:disabled) {
+  border-color: #d69b24;
+  background: #fff7d8;
+  transform: translateY(-1px);
+}
+
+.good-voice-like-button.active {
+  border-color: #dc5f4f;
+  color: #b33e31;
+  background: #fff0ed;
+}
+
+.good-voice-like-button.active svg {
+  fill: currentColor;
+}
+
+.good-voice-like-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .good-voices-details {
@@ -1494,11 +1552,26 @@ textarea {
   padding: 11px 14px;
 }
 
+.good-voice-row-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+
 .good-voice-meta {
   display: block;
-  margin-top: 6px;
   color: var(--muted);
   font-size: 0.76rem;
+}
+
+@media (max-width: 520px) {
+  .good-voice-card footer,
+  .good-voice-row-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 .date-picker-input {

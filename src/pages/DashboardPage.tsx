@@ -60,6 +60,11 @@ type GoodVoice = {
   sent_at: string;
 };
 
+type GoodVoiceLike = {
+  voice_id: string;
+  user_id: string;
+};
+
 const REACTION_OPTIONS: Array<{
   key: ReactionKey;
   emoji: string;
@@ -160,6 +165,9 @@ export function DashboardPage() {
   const [myEventCount, setMyEventCount] = useState(0);
   const [adjustments, setAdjustments] = useState<ThankYouAdjustment[]>([]);
   const [goodVoices, setGoodVoices] = useState<GoodVoice[]>([]);
+  const [goodVoiceLikes, setGoodVoiceLikes] = useState<
+    Record<string, { count: number; likedByMe: boolean }>
+  >({});
   const [likesByEvent, setLikesByEvent] = useState<
     Record<
       string,
@@ -186,6 +194,7 @@ export function DashboardPage() {
   const [savingEditId, setSavingEditId] = useState<string | null>(null);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [savingCommentId, setSavingCommentId] = useState<string | null>(null);
+  const [savingGoodVoiceLikeId, setSavingGoodVoiceLikeId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [realtimeStatus, setRealtimeStatus] =
     useState<RealtimeStatus>("connecting");
@@ -195,6 +204,7 @@ export function DashboardPage() {
   const burstId = useRef(0);
   const celebrationVariant = useRef(-1);
   const eventLoadRequestId = useRef(0);
+  const goodVoiceLoadRequestId = useRef(0);
 
   const loadInteractions = useCallback(
     async (eventIds: string[]) => {
@@ -408,7 +418,9 @@ export function DashboardPage() {
   }, []);
 
   const loadGoodVoices = useCallback(async () => {
-    const { data, error: voicesError } = await getSupabase()
+    const requestId = ++goodVoiceLoadRequestId.current;
+    const client = getSupabase();
+    const { data, error: voicesError } = await client
       .from("chatwork_good_voices")
       .select("id,chatwork_message_id,room_id,room_name,author_name,message_body,sent_at")
       .order("sent_at", { ascending: false })
@@ -418,8 +430,35 @@ export function DashboardPage() {
       setError("お客様の声を読み込めませんでした。");
       return;
     }
-    setGoodVoices(data ?? []);
-  }, []);
+
+    const voices = data ?? [];
+    const { data: likes, error: likesError } = voices.length
+      ? await client
+          .from("chatwork_good_voice_likes")
+          .select("voice_id,user_id")
+          .in("voice_id", voices.map((voice) => voice.id))
+          .returns<GoodVoiceLike[]>()
+      : { data: [] as GoodVoiceLike[], error: null };
+
+    if (requestId !== goodVoiceLoadRequestId.current) return;
+    if (likesError) {
+      setError("お客様の声のいいねを読み込めませんでした。");
+      return;
+    }
+
+    const nextLikes = Object.fromEntries(
+      voices.map((voice) => [voice.id, { count: 0, likedByMe: false }]),
+    ) as Record<string, { count: number; likedByMe: boolean }>;
+    for (const like of likes ?? []) {
+      const current = nextLikes[like.voice_id] ?? { count: 0, likedByMe: false };
+      current.count += 1;
+      if (like.user_id === user?.id) current.likedByMe = true;
+      nextLikes[like.voice_id] = current;
+    }
+
+    setGoodVoices(voices);
+    setGoodVoiceLikes(nextLikes);
+  }, [user?.id]);
 
   const loadDashboard = useCallback(async () => {
     const client = getSupabase();
@@ -490,6 +529,13 @@ export function DashboardPage() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "chatwork_good_voices" },
+        () => {
+          void loadGoodVoices();
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "chatwork_good_voice_likes" },
         () => {
           void loadGoodVoices();
         },
@@ -725,6 +771,55 @@ export function DashboardPage() {
 
     await loadInteractions(recentEventIds);
     setReactionPickerId(null);
+  }
+
+  async function toggleGoodVoiceLike(voiceId: string) {
+    if (!user?.id || savingGoodVoiceLikeId) return;
+
+    const client = getSupabase();
+    const current = goodVoiceLikes[voiceId] ?? { count: 0, likedByMe: false };
+    const willLike = !current.likedByMe;
+    setSavingGoodVoiceLikeId(voiceId);
+    setError(null);
+    setGoodVoiceLikes((likes) => ({
+      ...likes,
+      [voiceId]: {
+        count: Math.max(0, current.count + (willLike ? 1 : -1)),
+        likedByMe: willLike,
+      },
+    }));
+
+    const result = willLike
+      ? await client.from("chatwork_good_voice_likes").insert({ voice_id: voiceId })
+      : await client
+          .from("chatwork_good_voice_likes")
+          .delete()
+          .eq("voice_id", voiceId)
+          .eq("user_id", user.id);
+
+    if (result.error) {
+      setError("お客様の声のいいねを更新できませんでした。");
+    }
+    await loadGoodVoices();
+    setSavingGoodVoiceLikeId(null);
+  }
+
+  function goodVoiceLikeButton(voiceId: string) {
+    const like = goodVoiceLikes[voiceId] ?? { count: 0, likedByMe: false };
+    return (
+      <button
+        aria-label={`${like.likedByMe ? "いいねを取り消す" : "いいねする"}。現在 ${formatNumber(like.count)} 件`}
+        aria-pressed={like.likedByMe}
+        className={`good-voice-like-button${like.likedByMe ? " active" : ""}`}
+        disabled={savingGoodVoiceLikeId === voiceId}
+        onClick={() => void toggleGoodVoiceLike(voiceId)}
+        type="button"
+      >
+        <ThumbsUp aria-hidden="true" />
+        <span>いいね</span>
+        <strong>{formatNumber(like.count)}</strong>
+      </button>
+    );
   }
 
   function startEditingPost(post: EventWithProfile) {
@@ -966,8 +1061,11 @@ export function DashboardPage() {
                   ) : null}
                   <p>{voice.message_body}</p>
                   <footer>
-                    <span>{voice.author_name || "チャットワーク"}</span>
-                    <time dateTime={voice.sent_at}>{formatDateTime(voice.sent_at)}</time>
+                    <div className="good-voice-meta-row">
+                      <span>{voice.author_name || "チャットワーク"}</span>
+                      <time dateTime={voice.sent_at}>{formatDateTime(voice.sent_at)}</time>
+                    </div>
+                    {goodVoiceLikeButton(voice.id)}
                   </footer>
                 </article>
               ))}
@@ -981,7 +1079,10 @@ export function DashboardPage() {
                       <span aria-label="新着" className="good-voice-new-badge">NEW</span>
                     ) : null}
                     <p>{voice.message_body}</p>
-                    <span className="good-voice-meta">{voice.author_name || "チャットワーク"} / {formatDateTime(voice.sent_at)}</span>
+                    <div className="good-voice-row-footer">
+                      <span className="good-voice-meta">{voice.author_name || "チャットワーク"} / {formatDateTime(voice.sent_at)}</span>
+                      {goodVoiceLikeButton(voice.id)}
+                    </div>
                   </article>
                 ))}
               </div>

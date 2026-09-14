@@ -198,6 +198,13 @@ create table if not exists public.chatwork_good_voices (
 alter table public.chatwork_good_voices
   alter column chatwork_message_id drop not null;
 
+create table if not exists public.chatwork_good_voice_likes (
+  voice_id uuid not null references public.chatwork_good_voices (id) on delete cascade,
+  user_id uuid not null default auth.uid() references public.profiles (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (voice_id, user_id)
+);
+
 create table if not exists public.chatwork_good_voice_sync_state (
   room_id text primary key,
   last_message_id text,
@@ -434,6 +441,7 @@ alter table public.thank_you_adjustments enable row level security;
 alter table public.chatwork_settings enable row level security;
 alter table public.chatwork_monthly_notifications enable row level security;
 alter table public.chatwork_good_voices enable row level security;
+alter table public.chatwork_good_voice_likes enable row level security;
 alter table public.chatwork_good_voice_sync_state enable row level security;
 
 drop policy if exists "chatwork_good_voices_select_for_active_users" on public.chatwork_good_voices;
@@ -442,6 +450,33 @@ on public.chatwork_good_voices
 for select
 to authenticated
 using (app_private.current_user_is_active());
+
+drop policy if exists "chatwork_good_voice_likes_select_for_active_users" on public.chatwork_good_voice_likes;
+create policy "chatwork_good_voice_likes_select_for_active_users"
+on public.chatwork_good_voice_likes
+for select
+to authenticated
+using (app_private.current_user_is_active());
+
+drop policy if exists "chatwork_good_voice_likes_insert_own_for_active_users" on public.chatwork_good_voice_likes;
+create policy "chatwork_good_voice_likes_insert_own_for_active_users"
+on public.chatwork_good_voice_likes
+for insert
+to authenticated
+with check (
+  user_id = (select auth.uid())
+  and app_private.current_user_is_active()
+);
+
+drop policy if exists "chatwork_good_voice_likes_delete_own_for_active_users" on public.chatwork_good_voice_likes;
+create policy "chatwork_good_voice_likes_delete_own_for_active_users"
+on public.chatwork_good_voice_likes
+for delete
+to authenticated
+using (
+  user_id = (select auth.uid())
+  and app_private.current_user_is_active()
+);
 
 drop policy if exists "profiles_select_for_active_users_or_self" on public.profiles;
 create policy "profiles_select_for_active_users_or_self"
@@ -620,6 +655,7 @@ grant select, insert on public.thank_you_adjustments to authenticated;
 revoke all on public.chatwork_settings from anon, authenticated;
 revoke all on public.chatwork_monthly_notifications from anon, authenticated;
 grant select on public.chatwork_good_voices to authenticated;
+grant select, insert, delete on public.chatwork_good_voice_likes to authenticated;
 revoke all on public.chatwork_good_voice_sync_state from anon, authenticated;
 
 do $$
@@ -671,6 +707,15 @@ begin
       and tablename = 'chatwork_good_voices'
   ) then
     alter publication supabase_realtime add table public.chatwork_good_voices;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'chatwork_good_voice_likes'
+  ) then
+    alter publication supabase_realtime add table public.chatwork_good_voice_likes;
   end if;
 end;
 $$;

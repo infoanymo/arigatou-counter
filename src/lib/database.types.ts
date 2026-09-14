@@ -346,6 +346,35 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      chatwork_good_voice_likes: {
+        Row: {
+          voice_id: string;
+          user_id: string;
+          created_at: string;
+        };
+        Insert: {
+          voice_id: string;
+          user_id?: string;
+          created_at?: string;
+        };
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: "chatwork_good_voice_likes_voice_id_fkey";
+            columns: ["voice_id"];
+            isOneToOne: false;
+            referencedRelation: "chatwork_good_voices";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "chatwork_good_voice_likes_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
