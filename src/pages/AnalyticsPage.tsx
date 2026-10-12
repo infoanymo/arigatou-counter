@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { BarChart3, CalendarDays, RefreshCcw, UserRound } from "lucide-react";
 import type {
@@ -10,6 +10,7 @@ import { formatDateTime, formatNumber } from "../lib/format";
 import { getSupabase } from "../lib/supabase";
 import { ProfileAvatar } from "../components/ProfileAvatar";
 import { DatePickerField, formatDateLabel } from "../components/DatePickerField";
+import { analyticsDateRange, japanDateValue, loadAllAnalyticsRows } from "../lib/analytics";
 
 type MonthlySummary = {
   key: string;
@@ -21,7 +22,13 @@ type MonthlySummary = {
 
 type AnalyticsSection = "period" | "person";
 
-type EventWithProfile = ThankYouEvent & {
+type AnalyticsEvent = Pick<ThankYouEvent, "id" | "user_id" | "created_at">;
+type AnalyticsAdjustment = Pick<ThankYouAdjustment, "id" | "delta" | "created_at">;
+type AnalyticsProfile = Pick<
+  Profile,
+  "id" | "display_name" | "email" | "company_name" | "avatar_url" | "avatar_scale"
+>;
+type EventWithProfile = AnalyticsEvent & {
   profiles: Pick<
     Profile,
     "display_name" | "email" | "company_name" | "avatar_url" | "avatar_scale"
@@ -40,18 +47,8 @@ type PersonSummary = {
   latestAt: string;
 };
 
-const today = new Date().toISOString().slice(0, 10);
-
 function monthStart(value: string) {
   return `${value.slice(0, 7)}-01`;
-}
-
-function toRangeStart(value: string) {
-  return `${value}T00:00:00+09:00`;
-}
-
-function toRangeEnd(value: string) {
-  return `${value}T23:59:59.999+09:00`;
 }
 
 function monthKey(value: string) {
@@ -76,8 +73,10 @@ function nameForEvent(event: EventWithProfile) {
 }
 
 export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
+  const [today] = useState(japanDateValue);
+  const loadRequestId = useRef(0);
   const [events, setEvents] = useState<EventWithProfile[]>([]);
-  const [adjustments, setAdjustments] = useState<ThankYouAdjustment[]>([]);
+  const [adjustments, setAdjustments] = useState<AnalyticsAdjustment[]>([]);
   const [startDate, setStartDate] = useState(monthStart(today));
   const [endDate, setEndDate] = useState(today);
   const [draftStartDate, setDraftStartDate] = useState(monthStart(today));
@@ -86,38 +85,68 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
   const [message, setMessage] = useState<string | null>(null);
 
   const loadAnalytics = useCallback(async () => {
+    const requestId = ++loadRequestId.current;
     const client = getSupabase();
     setLoading(true);
     setMessage(null);
 
-    const [eventsResult, adjustmentsResult] = await Promise.all([
-      client
-        .from("thank_you_events")
-        .select(
-          "id,period_id,user_id,kind,message,created_at,profiles:profiles!thank_you_events_user_id_fkey(display_name,email,company_name,avatar_url,avatar_scale)",
-        )
-        .eq("kind", "thank_you")
-        .order("created_at", { ascending: false })
-        .limit(20000)
-        .returns<EventWithProfile[]>(),
-      client
-        .from("thank_you_adjustments")
-        .select("id,period_id,admin_user_id,delta,reason,created_at")
-        .order("created_at", { ascending: false })
-        .limit(20000)
-        .returns<ThankYouAdjustment[]>(),
-    ]);
+    const snapshotAt = new Date().toISOString();
+    try {
+      const [nextEvents, nextAdjustments] = await Promise.all([
+        loadAllAnalyticsRows<AnalyticsEvent>((from, to) =>
+          client
+            .from("thank_you_events")
+            .select("id,user_id,created_at", from === 0 ? { count: "exact" } : {})
+            .eq("kind", "thank_you")
+            .lte("created_at", snapshotAt)
+            .order("created_at", { ascending: false })
+            .order("id", { ascending: false })
+            .range(from, to)
+            .returns<AnalyticsEvent[]>(),
+        ),
+        loadAllAnalyticsRows<AnalyticsAdjustment>((from, to) =>
+          client
+            .from("thank_you_adjustments")
+            .select("id,delta,created_at", from === 0 ? { count: "exact" } : {})
+            .lte("created_at", snapshotAt)
+            .order("created_at", { ascending: false })
+            .order("id", { ascending: false })
+            .range(from, to)
+            .returns<AnalyticsAdjustment[]>(),
+        ),
+      ]);
 
-    if (eventsResult.error || adjustmentsResult.error) {
-      setMessage("分析データを読み込めませんでした。");
+      // Fetch avatars once per member instead of repeating them on every event.
+      const userIds = [...new Set(nextEvents.map((event) => event.user_id))];
+      const profiles = new Map<string, AnalyticsProfile>();
+      for (let offset = 0; offset < userIds.length; offset += 100) {
+        const batch = userIds.slice(offset, offset + 100);
+        const rows = await loadAllAnalyticsRows<AnalyticsProfile>((from, to) =>
+          client
+            .from("profiles")
+            .select("id,display_name,email,company_name,avatar_url,avatar_scale", from === 0 ? { count: "exact" } : {})
+            .in("id", batch)
+            .order("id")
+            .range(from, to)
+            .returns<AnalyticsProfile[]>(),
+        );
+        for (const profile of rows) profiles.set(profile.id, profile);
+      }
+
+      if (requestId !== loadRequestId.current) return;
+      setEvents(nextEvents.map((event) => ({
+        ...event,
+        profiles: profiles.get(event.user_id) ?? null,
+      })));
+      setAdjustments(nextAdjustments);
+    } catch {
+      if (requestId !== loadRequestId.current) return;
+      setMessage("分析データを読み込めませんでした。更新ボタンで再試行してください。");
       setEvents([]);
       setAdjustments([]);
-    } else {
-      setEvents(eventsResult.data ?? []);
-      setAdjustments(adjustmentsResult.data ?? []);
+    } finally {
+      if (requestId === loadRequestId.current) setLoading(false);
     }
-
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -157,10 +186,9 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
   }, [adjustments, events]);
 
   const rangeSummary = useMemo(() => {
-    const start = new Date(toRangeStart(startDate)).getTime();
-    const end = new Date(toRangeEnd(endDate)).getTime();
+    const { start, endExclusive, invalid } = analyticsDateRange(startDate, endDate);
 
-    if (!startDate || !endDate || start > end) {
+    if (invalid) {
       return {
         eventCount: 0,
         adjustmentTotal: 0,
@@ -171,12 +199,12 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
 
     const eventCount = events.filter((event) => {
       const createdAt = new Date(event.created_at).getTime();
-      return createdAt >= start && createdAt <= end;
+      return createdAt >= start && createdAt < endExclusive;
     }).length;
 
     const adjustmentTotal = adjustments.reduce((sum, adjustment) => {
       const createdAt = new Date(adjustment.created_at).getTime();
-      if (createdAt < start || createdAt > end) return sum;
+      if (createdAt < start || createdAt >= endExclusive) return sum;
       return sum + adjustment.delta;
     }, 0);
 
@@ -190,8 +218,7 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
 
   const allTimeTotal = monthlySummaries.reduce((sum, item) => sum + item.total, 0);
   const personSummaries = useMemo(() => {
-    const start = new Date(toRangeStart(startDate)).getTime();
-    const end = new Date(toRangeEnd(endDate)).getTime();
+    const { start, endExclusive } = analyticsDateRange(startDate, endDate);
     const summaries = new Map<string, PersonSummary>();
 
     for (const event of events) {
@@ -212,7 +239,7 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
         };
 
       base.total += 1;
-      if (!rangeSummary.invalid && createdAt >= start && createdAt <= end) {
+      if (!rangeSummary.invalid && createdAt >= start && createdAt < endExclusive) {
         base.rangeCount += 1;
       }
       if (event.created_at > base.latestAt) base.latestAt = event.created_at;
@@ -231,11 +258,7 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
   const topPerson = personSummaries.find((person) => person.rangeCount > 0);
   const maxRangeCount = Math.max(1, ...personSummaries.map((person) => person.rangeCount));
   const isPeriodSection = section === "period";
-  const draftInvalid =
-    !draftStartDate ||
-    !draftEndDate ||
-    new Date(toRangeStart(draftStartDate)).getTime() >
-      new Date(toRangeEnd(draftEndDate)).getTime();
+  const draftInvalid = analyticsDateRange(draftStartDate, draftEndDate).invalid;
   const rangeDirty = draftStartDate !== startDate || draftEndDate !== endDate;
 
   function applyDateRange() {

@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { CalendarDays } from "lucide-react";
-
-const today = new Date().toISOString().slice(0, 10);
+import { japanDateValue } from "../lib/analytics";
 
 function monthStart(value: string) {
   return `${value.slice(0, 7)}-01`;
 }
 
 function parseDate(value: string) {
-  return new Date(`${value}T00:00:00+09:00`);
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
 }
 
 function formatDateValue(value: Date) {
@@ -58,6 +58,7 @@ export function DatePickerField({
   onChange: (value: string) => void;
   value: string;
 }) {
+  const today = japanDateValue();
   const rootRef = useRef<HTMLLabelElement>(null);
   const selectedDate = parseDate(value);
   const [open, setOpen] = useState(false);
