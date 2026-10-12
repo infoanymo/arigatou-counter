@@ -27,6 +27,7 @@ import { formatDate, formatDateTime, formatNumber, daysUntil } from "../lib/form
 import { getSupabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { ProfileAvatar } from "../components/ProfileAvatar";
+import { loadAllRows, loadRowsForIds } from "../lib/pagination";
 
 type EventWithProfile = ThankYouEvent & {
   profiles: Pick<
@@ -96,7 +97,6 @@ type RankingEvent = Pick<ThankYouEvent, "user_id" | "created_at">;
 type RankingProfile = ProfileSummary & { id: string };
 
 const EVENT_PAGE_SIZE = 20;
-const RANKING_PAGE_SIZE = 1000;
 const GOOD_VOICE_NEW_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
 function isNewGoodVoice(sentAt: string) {
@@ -127,31 +127,25 @@ function emptyReactionUsers() {
 async function loadRankingEvents(
   client: ReturnType<typeof getSupabase>,
   periodId: string,
-  expectedCount: number | null,
 ) {
-  const rankingEvents: RankingEvent[] = [];
-  let offset = 0;
-
-  while (expectedCount === null || offset < expectedCount) {
-    const { data, error } = await client
-      .from("thank_you_events")
-      .select("user_id,created_at")
-      .eq("period_id", periodId)
-      .eq("kind", "thank_you")
-      .order("created_at", { ascending: false })
-      .range(offset, offset + RANKING_PAGE_SIZE - 1)
-      .returns<RankingEvent[]>();
-
-    if (error) return { data: null, error };
-
-    const page = data ?? [];
-    rankingEvents.push(...page);
-    offset += page.length;
-
-    if (page.length < RANKING_PAGE_SIZE) break;
+  try {
+    const snapshotAt = new Date().toISOString();
+    const data = await loadAllRows<RankingEvent>((from, to) =>
+      client
+        .from("thank_you_events")
+        .select("user_id,created_at", from === 0 ? { count: "exact" } : {})
+        .eq("period_id", periodId)
+        .eq("kind", "thank_you")
+        .lte("created_at", snapshotAt)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, to)
+        .returns<RankingEvent[]>(),
+    );
+    return { data, error: null };
+  } catch (error) {
+    return { data: null, error };
   }
-
-  return { data: rankingEvents, error: null };
 }
 
 export function DashboardPage() {
@@ -205,9 +199,12 @@ export function DashboardPage() {
   const celebrationVariant = useRef(-1);
   const eventLoadRequestId = useRef(0);
   const goodVoiceLoadRequestId = useRef(0);
+  const interactionLoadRequestId = useRef(0);
+  const visibleHistoryCount = useRef(EVENT_PAGE_SIZE);
 
   const loadInteractions = useCallback(
     async (eventIds: string[]) => {
+      const requestId = ++interactionLoadRequestId.current;
       const client = getSupabase();
 
       if (!eventIds.length) {
@@ -216,172 +213,212 @@ export function DashboardPage() {
         return;
       }
 
-      const [likesResult, commentsResult] = await Promise.all([
-        client
-          .from("thank_you_likes")
-          .select(
-            "event_id,user_id,reaction,profiles:profiles!thank_you_likes_user_id_fkey(display_name,email,company_name,avatar_url,avatar_scale)",
-          )
-          .in("event_id", eventIds),
-        client
-          .from("thank_you_comments")
-          .select(
-            "id,event_id,user_id,body,created_at,profiles:profiles!thank_you_comments_user_id_fkey(display_name,email,company_name,avatar_url,avatar_scale)",
-          )
-          .in("event_id", eventIds)
-          .order("created_at", { ascending: true })
-          .returns<CommentWithProfile[]>(),
-      ]);
+      try {
+        const [likes, comments] = await Promise.all([
+          loadRowsForIds<ReactionWithProfile>(eventIds, (batch, from, to) =>
+            client
+              .from("thank_you_likes")
+              .select(
+                "event_id,user_id,reaction,profiles:profiles!thank_you_likes_user_id_fkey(display_name,email,company_name,avatar_url,avatar_scale)",
+                from === 0 ? { count: "exact" } : {},
+              )
+              .in("event_id", batch)
+              .order("event_id")
+              .order("user_id")
+              .order("reaction")
+              .range(from, to)
+              .returns<ReactionWithProfile[]>(),
+          ),
+          loadRowsForIds<CommentWithProfile>(eventIds, (batch, from, to) =>
+            client
+              .from("thank_you_comments")
+              .select(
+                "id,event_id,user_id,body,created_at,profiles:profiles!thank_you_comments_user_id_fkey(display_name,email,company_name,avatar_url,avatar_scale)",
+                from === 0 ? { count: "exact" } : {},
+              )
+              .in("event_id", batch)
+              .order("created_at", { ascending: true })
+              .order("id")
+              .range(from, to)
+              .returns<CommentWithProfile[]>(),
+          ),
+        ]);
+        if (requestId !== interactionLoadRequestId.current) return;
 
-      if (likesResult.error || commentsResult.error) {
-        setError("いいね・コメントを読み込めませんでした。");
-        return;
-      }
-
-      const nextLikes = Object.fromEntries(
-        eventIds.map((eventId) => [
-          eventId,
+        const nextLikes = Object.fromEntries(
+          eventIds.map((eventId) => [
+            eventId,
+            {
+              reactionCounts: emptyReactionCounts(),
+              reactionByMe: [],
+              reactionUsers: emptyReactionUsers(),
+            },
+          ]),
+        ) as Record<
+          string,
           {
+            reactionCounts: Record<ReactionKey, number>;
+            reactionByMe: ReactionKey[];
+            reactionUsers: Record<ReactionKey, ProfileSummary[]>;
+          }
+        >;
+
+        for (const like of likes) {
+          const current = nextLikes[like.event_id] ?? {
             reactionCounts: emptyReactionCounts(),
             reactionByMe: [],
             reactionUsers: emptyReactionUsers(),
-          },
-        ]),
-      ) as Record<
-        string,
-        {
-          reactionCounts: Record<ReactionKey, number>;
-          reactionByMe: ReactionKey[];
-          reactionUsers: Record<ReactionKey, ProfileSummary[]>;
+          };
+          const reaction = like.reaction as ReactionKey;
+          current.reactionCounts[reaction] =
+            (current.reactionCounts[reaction] ?? 0) + 1;
+          if (like.profiles) {
+            current.reactionUsers[reaction] = [
+              ...current.reactionUsers[reaction],
+              like.profiles,
+            ];
+          }
+          if (
+            like.user_id === user?.id &&
+            !current.reactionByMe.includes(reaction)
+          ) {
+            current.reactionByMe = [...current.reactionByMe, reaction];
+          }
+          nextLikes[like.event_id] = current;
         }
-      >;
 
-      for (const like of (likesResult.data ?? []) as ReactionWithProfile[]) {
-        const current = nextLikes[like.event_id] ?? {
-          reactionCounts: emptyReactionCounts(),
-          reactionByMe: [],
-          reactionUsers: emptyReactionUsers(),
-        };
-        const reaction = like.reaction as ReactionKey;
-        current.reactionCounts[reaction] = (current.reactionCounts[reaction] ?? 0) + 1;
-        if (like.profiles) {
-          current.reactionUsers[reaction] = [
-            ...current.reactionUsers[reaction],
-            like.profiles,
+        const nextComments = Object.fromEntries(
+          eventIds.map((eventId) => [eventId, []]),
+        ) as Record<string, CommentWithProfile[]>;
+
+        for (const comment of comments) {
+          nextComments[comment.event_id] = [
+            ...(nextComments[comment.event_id] ?? []),
+            comment,
           ];
         }
-        if (like.user_id === user?.id && !current.reactionByMe.includes(reaction)) {
-          current.reactionByMe = [...current.reactionByMe, reaction];
+
+        setLikesByEvent(nextLikes);
+        setCommentsByEvent(nextComments);
+      } catch {
+        if (requestId === interactionLoadRequestId.current) {
+          setError("いいね・コメントを読み込めませんでした。");
         }
-        nextLikes[like.event_id] = current;
       }
-
-      const nextComments = Object.fromEntries(
-        eventIds.map((eventId) => [eventId, []]),
-      ) as Record<string, CommentWithProfile[]>;
-
-      for (const comment of commentsResult.data ?? []) {
-        nextComments[comment.event_id] = [
-          ...(nextComments[comment.event_id] ?? []),
-          comment,
-        ];
-      }
-
-      setLikesByEvent(nextLikes);
-      setCommentsByEvent(nextComments);
     },
     [user?.id],
   );
 
-  const loadEvents = useCallback(async (periodId: string) => {
-    const requestId = ++eventLoadRequestId.current;
-    const client = getSupabase();
-    const [eventsResult, countResult, thankYouCountResult, myCountResult] = await Promise.all([
-      client
-        .from("thank_you_events")
-        .select(
-          "id, period_id, user_id, kind, message, created_at, profiles:profiles!thank_you_events_user_id_fkey(display_name,email,company_name,avatar_url,avatar_scale)",
-        )
-        .eq("period_id", periodId)
-        .order("created_at", { ascending: false })
-        .range(0, EVENT_PAGE_SIZE - 1)
-        .returns<EventWithProfile[]>(),
-      client
-        .from("thank_you_events")
-        .select("id", { count: "exact", head: true })
-        .eq("period_id", periodId),
-      client
-        .from("thank_you_events")
-        .select("id", { count: "exact", head: true })
-        .eq("period_id", periodId)
-        .eq("kind", "thank_you"),
-      client
-        .from("thank_you_events")
-        .select("id", { count: "exact", head: true })
-        .eq("period_id", periodId)
-        .eq("kind", "thank_you")
-        .eq("user_id", user?.id ?? ""),
-    ]);
+  const loadEvents = useCallback(
+    async (periodId: string) => {
+      const requestId = ++eventLoadRequestId.current;
+      const client = getSupabase();
+      const [eventsResult, countResult, thankYouCountResult, myCountResult] =
+        await Promise.all([
+          loadAllRows<EventWithProfile>(
+            (from, to) =>
+              client
+                .from("thank_you_events")
+                .select(
+                  "id, period_id, user_id, kind, message, created_at, profiles:profiles!thank_you_events_user_id_fkey(display_name,email,company_name,avatar_url,avatar_scale)",
+                  from === 0 ? { count: "exact" } : {},
+                )
+                .eq("period_id", periodId)
+                .order("created_at", { ascending: false })
+                .order("id", { ascending: false })
+                .range(from, to)
+                .returns<EventWithProfile[]>(),
+            visibleHistoryCount.current,
+          ).then(
+            (data) => ({ data, error: null }),
+            (error) => ({ data: null, error }),
+          ),
+          client
+            .from("thank_you_events")
+            .select("id", { count: "exact", head: true })
+            .eq("period_id", periodId),
+          client
+            .from("thank_you_events")
+            .select("id", { count: "exact", head: true })
+            .eq("period_id", periodId)
+            .eq("kind", "thank_you"),
+          client
+            .from("thank_you_events")
+            .select("id", { count: "exact", head: true })
+            .eq("period_id", periodId)
+            .eq("kind", "thank_you")
+            .eq("user_id", user?.id ?? ""),
+        ]);
 
-    if (
-      eventsResult.error ||
-      countResult.error ||
-      thankYouCountResult.error ||
-      myCountResult.error
-    ) {
+      if (
+        eventsResult.error ||
+        countResult.error ||
+        thankYouCountResult.error ||
+        myCountResult.error
+      ) {
+        if (requestId !== eventLoadRequestId.current) return;
+        setError("ありがとう履歴を読み込めませんでした。");
+        return;
+      }
+
+      const rankingResult = await loadRankingEvents(client, periodId);
+
+      if (rankingResult.error) {
+        if (requestId !== eventLoadRequestId.current) return;
+        setError("個人ランキングを読み込めませんでした。");
+        return;
+      }
+
+      const rankingCounts = new Map<string, number>();
+      for (const event of rankingResult.data ?? []) {
+        rankingCounts.set(
+          event.user_id,
+          (rankingCounts.get(event.user_id) ?? 0) + 1,
+        );
+      }
+      const rankingUserIds = [...rankingCounts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([userId]) => userId);
+      const { data: profileData } = rankingUserIds.length
+        ? await client
+            .from("profiles")
+            .select(
+              "id,display_name,email,company_name,avatar_url,avatar_scale",
+            )
+            .in("id", rankingUserIds)
+            .returns<RankingProfile[]>()
+        : { data: [] as RankingProfile[] };
+
+      // Realtime and the button handler can request the same data at nearly the
+      // same time. Never let an older response overwrite a newer count.
       if (requestId !== eventLoadRequestId.current) return;
-      setError("ありがとう履歴を読み込めませんでした。");
-      return;
-    }
 
-    const rankingResult = await loadRankingEvents(
-      client,
-      periodId,
-      thankYouCountResult.count,
-    );
-
-    if (rankingResult.error) {
-      if (requestId !== eventLoadRequestId.current) return;
-      setError("個人ランキングを読み込めませんでした。");
-      return;
-    }
-
-    const rankingCounts = new Map<string, number>();
-    for (const event of rankingResult.data ?? []) {
-      rankingCounts.set(event.user_id, (rankingCounts.get(event.user_id) ?? 0) + 1);
-    }
-    const rankingUserIds = [...rankingCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([userId]) => userId);
-    const { data: profileData } = rankingUserIds.length
-      ? await client
-          .from("profiles")
-          .select("id,display_name,email,company_name,avatar_url,avatar_scale")
-          .in("id", rankingUserIds)
-          .returns<RankingProfile[]>()
-      : { data: [] as RankingProfile[] };
-
-    // Realtime and the button handler can request the same data at nearly the
-    // same time. Never let an older response overwrite a newer count.
-    if (requestId !== eventLoadRequestId.current) return;
-
-    const nextEvents = eventsResult.data ?? [];
-    setEvents(nextEvents);
-    setRankingEvents(rankingResult.data ?? []);
-    setRankingProfiles(
-      Object.fromEntries((profileData ?? []).map((profile) => [profile.id, profile])),
-    );
-    setHistoryTotalCount(countResult.count ?? 0);
-    setEventTotalCount(thankYouCountResult.count ?? 0);
-    setMyEventCount(myCountResult.count ?? 0);
-    await loadInteractions(nextEvents.map((event) => event.id));
-  }, [loadInteractions, user?.id]);
+      const nextEvents = eventsResult.data ?? [];
+      visibleHistoryCount.current = Math.max(
+        EVENT_PAGE_SIZE,
+        nextEvents.length,
+      );
+      setEvents(nextEvents);
+      setRankingEvents(rankingResult.data ?? []);
+      setRankingProfiles(
+        Object.fromEntries(
+          (profileData ?? []).map((profile) => [profile.id, profile]),
+        ),
+      );
+      setHistoryTotalCount(countResult.count ?? 0);
+      setEventTotalCount(thankYouCountResult.count ?? 0);
+      setMyEventCount(myCountResult.count ?? 0);
+    },
+    [user?.id],
+  );
 
   const loadMoreEvents = useCallback(async () => {
-    if (!period || loadingMoreEvents || events.length >= historyTotalCount) return;
+    if (!period || loadingMoreEvents || events.length >= historyTotalCount)
+      return;
 
     setLoadingMoreEvents(true);
+    const requestId = ++eventLoadRequestId.current;
     const { data, error: eventsError } = await getSupabase()
       .from("thank_you_events")
       .select(
@@ -389,75 +426,97 @@ export function DashboardPage() {
       )
       .eq("period_id", period.id)
       .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
       .range(events.length, events.length + EVENT_PAGE_SIZE - 1)
       .returns<EventWithProfile[]>();
 
+    if (requestId !== eventLoadRequestId.current) {
+      setLoadingMoreEvents(false);
+      return;
+    }
     if (eventsError) {
       setError("過去のありがとうを読み込めませんでした。");
     } else {
-      setEvents((current) => [...current, ...(data ?? [])]);
+      const nextEvents = [...events, ...(data ?? [])];
+      visibleHistoryCount.current = nextEvents.length;
+      setEvents(nextEvents);
     }
     setLoadingMoreEvents(false);
   }, [events.length, historyTotalCount, loadingMoreEvents, period]);
 
   const loadAdjustments = useCallback(async (periodId: string) => {
     const client = getSupabase();
-    const { data, error: adjustmentsError } = await client
-      .from("thank_you_adjustments")
-      .select("id, period_id, admin_user_id, delta, reason, created_at")
-      .eq("period_id", periodId)
-      .order("created_at", { ascending: false })
-      .returns<ThankYouAdjustment[]>();
-
-    if (adjustmentsError) {
+    try {
+      const data = await loadAllRows<ThankYouAdjustment>((from, to) =>
+        client
+          .from("thank_you_adjustments")
+          .select(
+            "id, period_id, admin_user_id, delta, reason, created_at",
+            from === 0 ? { count: "exact" } : {},
+          )
+          .eq("period_id", periodId)
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, to)
+          .returns<ThankYouAdjustment[]>(),
+      );
+      setAdjustments(data);
+    } catch {
       setError("ありがとう補正を読み込めませんでした。");
-      return;
     }
-
-    setAdjustments(data ?? []);
   }, []);
 
   const loadGoodVoices = useCallback(async () => {
     const requestId = ++goodVoiceLoadRequestId.current;
     const client = getSupabase();
-    const { data, error: voicesError } = await client
-      .from("chatwork_good_voices")
-      .select("id,chatwork_message_id,room_id,room_name,author_name,message_body,sent_at")
-      .order("sent_at", { ascending: false })
-      .limit(50)
-      .returns<GoodVoice[]>();
-    if (voicesError) {
-      setError("お客様の声を読み込めませんでした。");
-      return;
+    try {
+      const voices = await loadAllRows<GoodVoice>((from, to) =>
+        client
+          .from("chatwork_good_voices")
+          .select(
+            "id,chatwork_message_id,room_id,room_name,author_name,message_body,sent_at",
+            from === 0 ? { count: "exact" } : {},
+          )
+          .order("sent_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, to)
+          .returns<GoodVoice[]>(),
+      );
+      const likes = await loadRowsForIds<GoodVoiceLike>(
+        voices.map((voice) => voice.id),
+        (batch, from, to) =>
+          client
+            .from("chatwork_good_voice_likes")
+            .select("voice_id,user_id", from === 0 ? { count: "exact" } : {})
+            .in("voice_id", batch)
+            .order("voice_id")
+            .order("user_id")
+            .range(from, to)
+            .returns<GoodVoiceLike[]>(),
+      );
+
+      if (requestId !== goodVoiceLoadRequestId.current) return;
+
+      const nextLikes = Object.fromEntries(
+        voices.map((voice) => [voice.id, { count: 0, likedByMe: false }]),
+      ) as Record<string, { count: number; likedByMe: boolean }>;
+      for (const like of likes ?? []) {
+        const current = nextLikes[like.voice_id] ?? {
+          count: 0,
+          likedByMe: false,
+        };
+        current.count += 1;
+        if (like.user_id === user?.id) current.likedByMe = true;
+        nextLikes[like.voice_id] = current;
+      }
+
+      setGoodVoices(voices);
+      setGoodVoiceLikes(nextLikes);
+    } catch {
+      if (requestId === goodVoiceLoadRequestId.current) {
+        setError("お客様の声を読み込めませんでした。");
+      }
     }
-
-    const voices = data ?? [];
-    const { data: likes, error: likesError } = voices.length
-      ? await client
-          .from("chatwork_good_voice_likes")
-          .select("voice_id,user_id")
-          .in("voice_id", voices.map((voice) => voice.id))
-          .returns<GoodVoiceLike[]>()
-      : { data: [] as GoodVoiceLike[], error: null };
-
-    if (requestId !== goodVoiceLoadRequestId.current) return;
-    if (likesError) {
-      setError("お客様の声のいいねを読み込めませんでした。");
-      return;
-    }
-
-    const nextLikes = Object.fromEntries(
-      voices.map((voice) => [voice.id, { count: 0, likedByMe: false }]),
-    ) as Record<string, { count: number; likedByMe: boolean }>;
-    for (const like of likes ?? []) {
-      const current = nextLikes[like.voice_id] ?? { count: 0, likedByMe: false };
-      current.count += 1;
-      if (like.user_id === user?.id) current.likedByMe = true;
-      nextLikes[like.voice_id] = current;
-    }
-
-    setGoodVoices(voices);
-    setGoodVoiceLikes(nextLikes);
   }, [user?.id]);
 
   const loadDashboard = useCallback(async () => {
@@ -580,6 +639,7 @@ export function DashboardPage() {
     if (!period) return undefined;
 
     const client = getSupabase();
+    void loadInteractions(recentEventIds);
     const channel = client
       .channel(`thank-you-interactions:${period.id}:${recentEventKey}`)
       .on(

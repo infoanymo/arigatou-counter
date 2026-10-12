@@ -10,7 +10,8 @@ import { formatDateTime, formatNumber } from "../lib/format";
 import { getSupabase } from "../lib/supabase";
 import { ProfileAvatar } from "../components/ProfileAvatar";
 import { DatePickerField, formatDateLabel } from "../components/DatePickerField";
-import { analyticsDateRange, japanDateValue, loadAllAnalyticsRows } from "../lib/analytics";
+import { analyticsDateRange, japanDateValue } from "../lib/analytics";
+import { loadAllRows } from "../lib/pagination";
 
 type MonthlySummary = {
   key: string;
@@ -93,7 +94,7 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
     const snapshotAt = new Date().toISOString();
     try {
       const [nextEvents, nextAdjustments] = await Promise.all([
-        loadAllAnalyticsRows<AnalyticsEvent>((from, to) =>
+        loadAllRows<AnalyticsEvent>((from, to) =>
           client
             .from("thank_you_events")
             .select("id,user_id,created_at", from === 0 ? { count: "exact" } : {})
@@ -104,7 +105,7 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
             .range(from, to)
             .returns<AnalyticsEvent[]>(),
         ),
-        loadAllAnalyticsRows<AnalyticsAdjustment>((from, to) =>
+        loadAllRows<AnalyticsAdjustment>((from, to) =>
           client
             .from("thank_you_adjustments")
             .select("id,delta,created_at", from === 0 ? { count: "exact" } : {})
@@ -121,7 +122,7 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
       const profiles = new Map<string, AnalyticsProfile>();
       for (let offset = 0; offset < userIds.length; offset += 100) {
         const batch = userIds.slice(offset, offset + 100);
-        const rows = await loadAllAnalyticsRows<AnalyticsProfile>((from, to) =>
+        const rows = await loadAllRows<AnalyticsProfile>((from, to) =>
           client
             .from("profiles")
             .select("id,display_name,email,company_name,avatar_url,avatar_scale", from === 0 ? { count: "exact" } : {})

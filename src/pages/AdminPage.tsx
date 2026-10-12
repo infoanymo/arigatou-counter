@@ -28,6 +28,9 @@ import { formatDateTime, formatNumber } from "../lib/format";
 import { getSupabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { ProfileAvatar } from "../components/ProfileAvatar";
+import { loadAllRows } from "../lib/pagination";
+import { formatIntegerInput, parseIntegerInput } from "../lib/integer-input";
+import { japanDateValue } from "../lib/analytics";
 
 type AdminUser = {
   id: string;
@@ -191,7 +194,6 @@ const planLabels = {
 } as const;
 
 const usdToJpyRate = 158;
-const today = new Date().toISOString().slice(0, 10);
 const defaultChatworkMessageTemplate = `[toall]
 [info][title]内容：ありがとう集計[/title]
 担当部署：CS/CX
@@ -228,19 +230,6 @@ function normalizeChatworkRooms(rooms: ChatworkRoomSettings[] | undefined) {
         }),
       )
     : [createChatworkRoom()];
-}
-
-function parseIntegerInput(value: string) {
-  return Number(value.replace(/,/g, ""));
-}
-
-function formatIntegerInput(value: string, signed = false) {
-  const trimmed = value.trim();
-  const sign = signed && /^[+-]/.test(trimmed) ? trimmed[0] : "";
-  const digits = trimmed.replace(/\D/g, "");
-
-  if (!digits) return sign;
-  return `${sign}${formatNumber(Number(digits))}`;
 }
 
 function formatYenFromUsd(value: number | null | undefined) {
@@ -280,7 +269,7 @@ function shortEventId(value: string) {
 
 function localDateTimeToIso(value: string) {
   if (!value) return null;
-  const date = new Date(value);
+  const date = new Date(`${value}+09:00`);
   if (Number.isNaN(date.getTime())) return null;
   return date.toISOString();
 }
@@ -305,8 +294,9 @@ function billingApiBreakdown(usage: BillingUsage | null) {
 }
 
 function defaultPeriodForm(): PeriodForm {
-  const end = new Date();
-  end.setMonth(end.getMonth() + 3);
+  const today = japanDateValue();
+  const end = new Date(`${today}T00:00:00Z`);
+  end.setUTCMonth(end.getUTCMonth() + 3);
 
   return {
     id: null,
@@ -450,7 +440,7 @@ export function AdminPage({ section }: { section: AdminSection }) {
   const [goodVoiceKeywords, setGoodVoiceKeywords] = useState("お客様,お声,見えるようになりました,よく見える,改善");
   const [manualGoodVoiceBody, setManualGoodVoiceBody] = useState("");
   const [manualGoodVoiceAuthor, setManualGoodVoiceAuthor] = useState("");
-  const [manualGoodVoiceDate, setManualGoodVoiceDate] = useState(today);
+  const [manualGoodVoiceDate, setManualGoodVoiceDate] = useState(japanDateValue);
   const manualGoodVoiceDateInputRef = useRef<HTMLInputElement>(null);
   const [addingManualGoodVoice, setAddingManualGoodVoice] = useState(false);
   const [manualGoodVoices, setManualGoodVoices] = useState<ManualGoodVoice[]>([]);
@@ -511,6 +501,7 @@ export function AdminPage({ section }: { section: AdminSection }) {
           "id, period_id, user_id, kind, message, created_at, profiles:profiles!thank_you_events_user_id_fkey(display_name,email,company_name,avatar_url,avatar_scale)",
         )
         .eq("period_id", periodId)
+        .eq("kind", "thank_you")
         .order("created_at", { ascending: false })
         .limit(500);
 
@@ -586,23 +577,25 @@ export function AdminPage({ section }: { section: AdminSection }) {
       setEventCount(count ?? 0);
     }
 
-    const { data, error: adjustmentsError } = await client
-      .from("thank_you_adjustments")
-      .select(
-        "id, period_id, admin_user_id, delta, reason, created_at, profiles:profiles!thank_you_adjustments_admin_user_id_fkey(display_name,email,avatar_url,avatar_scale)",
-      )
-      .eq("period_id", periodId)
-      .order("created_at", { ascending: false })
-      .limit(30)
-      .returns<AdjustmentWithProfile[]>();
-
-    if (adjustmentsError) {
+    try {
+      const data = await loadAllRows<AdjustmentWithProfile>((from, to) =>
+        client
+          .from("thank_you_adjustments")
+          .select(
+            "id, period_id, admin_user_id, delta, reason, created_at, profiles:profiles!thank_you_adjustments_admin_user_id_fkey(display_name,email,avatar_url,avatar_scale)",
+            from === 0 ? { count: "exact" } : {},
+          )
+          .eq("period_id", periodId)
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, to)
+          .returns<AdjustmentWithProfile[]>(),
+      );
+      setAdjustments(data);
+    } catch {
       setMessage("補正履歴を読み込めませんでした。");
       setAdjustments([]);
-      return;
     }
-
-    setAdjustments(data ?? []);
   }, []);
 
   const loadAdmin = useCallback(async () => {
@@ -951,7 +944,7 @@ export function AdminPage({ section }: { section: AdminSection }) {
       });
       setManualGoodVoiceBody("");
       setManualGoodVoiceAuthor("");
-      setManualGoodVoiceDate(today);
+      setManualGoodVoiceDate(japanDateValue());
       setMessage("いいお声を追加しました。");
       await loadChatwork();
     } catch (error) {
@@ -1273,7 +1266,7 @@ export function AdminPage({ section }: { section: AdminSection }) {
             </label>
             <button
               className="button button-primary"
-              disabled={savingAdjustment || !periodForm.id}
+              disabled={loading || savingAdjustment || !periodForm.id}
             >
               <Calculator aria-hidden="true" />
               {savingAdjustment ? "登録中..." : "補正を登録"}

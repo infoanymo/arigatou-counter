@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { analyticsDateRange, japanDateValue, loadAllAnalyticsRows } from "../src/lib/analytics.ts";
+import { analyticsDateRange, japanDateValue } from "../src/lib/analytics.ts";
+import { loadAllRows as loadAllAnalyticsRows } from "../src/lib/pagination.ts";
 
 test("includes old rows beyond 1,000 and the previous 20,000 limit", async () => {
   const source = Array.from({ length: 20501 }, (_, id) => ({ id }));

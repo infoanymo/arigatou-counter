@@ -14,6 +14,8 @@ import { useAuth } from "../lib/auth";
 import type { Period } from "../lib/database.types";
 import { formatNumber } from "../lib/format";
 import { getSupabase } from "../lib/supabase";
+import { analyticsDateRange, japanDateValue } from "../lib/analytics";
+import { formatIntegerInput, parseIntegerInput } from "../lib/integer-input";
 
 type SettingsSection = "profile" | "period";
 
@@ -25,21 +27,10 @@ type PeriodForm = {
   target_count: string;
 };
 
-const today = new Date().toISOString().slice(0, 10);
-
-function parseIntegerInput(value: string) {
-  return Number(value.replace(/,/g, ""));
-}
-
-function formatIntegerInput(value: string) {
-  const digits = value.trim().replace(/\D/g, "");
-  if (!digits) return "";
-  return formatNumber(Number(digits));
-}
-
 function defaultPeriodForm(): PeriodForm {
-  const end = new Date();
-  end.setMonth(end.getMonth() + 3);
+  const today = japanDateValue();
+  const end = new Date(`${today}T00:00:00Z`);
+  end.setUTCMonth(end.getUTCMonth() + 3);
 
   return {
     id: null,
@@ -83,11 +74,13 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
   const [periodForm, setPeriodForm] = useState<PeriodForm>(defaultPeriodForm);
   const [saving, setSaving] = useState(false);
   const [savingPeriod, setSavingPeriod] = useState(false);
+  const [periodLoaded, setPeriodLoaded] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const loadPeriod = useCallback(async () => {
     if (!isAdmin || section !== "period") return;
     const client = getSupabase();
+    setPeriodLoaded(false);
     setMessage(null);
 
     const { data, error } = await client
@@ -104,6 +97,7 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
     }
 
     setPeriodForm(formFromPeriod(data));
+    setPeriodLoaded(true);
   }, [isAdmin, section]);
 
   useEffect(() => {
@@ -173,11 +167,17 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
 
   async function handlePeriodSave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!periodLoaded || savingPeriod) return;
     const client = getSupabase();
     const target = parseIntegerInput(periodForm.target_count);
 
     if (!Number.isInteger(target) || target <= 0) {
       setMessage("目標数は1以上の整数で入力してください。");
+      return;
+    }
+
+    if (analyticsDateRange(periodForm.starts_on, periodForm.ends_on).invalid) {
+      setMessage("終了日は開始日以降にしてください。");
       return;
     }
 
@@ -193,18 +193,25 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
       updated_at: new Date().toISOString(),
     };
 
-    const result = periodForm.id
-      ? await client.from("periods").update(payload).eq("id", periodForm.id)
-      : await client.from("periods").insert(payload).select("*").single();
-
-    if (result.error) {
-      setMessage("期設定を保存できませんでした。");
-    } else {
+    try {
+      const result = periodForm.id
+        ? await client
+            .from("periods")
+            .update(payload)
+            .eq("id", periodForm.id)
+            .select("*")
+            .single()
+        : await client.from("periods").insert(payload).select("*").single();
+      if (result.error) throw result.error;
+      setPeriodForm(formFromPeriod(result.data));
       setMessage("期設定を保存しました。");
-      await loadPeriod();
+    } catch {
+      setMessage(
+        "期設定を保存できませんでした。時間をおいて再度お試しください。",
+      );
+    } finally {
+      setSavingPeriod(false);
     }
-
-    setSavingPeriod(false);
   }
 
   const isProfileSection = section === "profile";
@@ -377,7 +384,7 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
                 value={periodForm.target_count}
               />
             </label>
-            <button className="button button-primary" disabled={savingPeriod}>
+            <button className="button button-primary" disabled={savingPeriod || !periodLoaded}>
               <ShieldCheck aria-hidden="true" />
               {savingPeriod ? "保存中..." : "期設定を保存"}
             </button>
