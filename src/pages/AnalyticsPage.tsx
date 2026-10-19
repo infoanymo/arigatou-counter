@@ -9,9 +9,16 @@ import type {
 import { formatDateTime, formatNumber } from "../lib/format";
 import { getSupabase } from "../lib/supabase";
 import { ProfileAvatar } from "../components/ProfileAvatar";
-import { DatePickerField, formatDateLabel } from "../components/DatePickerField";
+import {
+  DatePickerField,
+  formatDateLabel,
+} from "../components/DatePickerField";
 import { analyticsDateRange, japanDateValue } from "../lib/analytics";
 import { loadAllRows } from "../lib/pagination";
+import {
+  RequestTimeoutError,
+  withRequestDeadline,
+} from "../lib/abortable-request";
 
 type MonthlySummary = {
   key: string;
@@ -24,18 +31,19 @@ type MonthlySummary = {
 type AnalyticsSection = "period" | "person";
 
 type AnalyticsEvent = Pick<ThankYouEvent, "id" | "user_id" | "created_at">;
-type AnalyticsAdjustment = Pick<ThankYouAdjustment, "id" | "delta" | "created_at">;
+type AnalyticsAdjustment = Pick<
+  ThankYouAdjustment,
+  "id" | "delta" | "created_at"
+>;
 type AnalyticsProfile = Pick<
   Profile,
-  "id" | "display_name" | "email" | "company_name" | "avatar_url" | "avatar_scale"
+  | "id"
+  | "display_name"
+  | "email"
+  | "company_name"
+  | "avatar_url"
+  | "avatar_scale"
 >;
-type EventWithProfile = AnalyticsEvent & {
-  profiles: Pick<
-    Profile,
-    "display_name" | "email" | "company_name" | "avatar_url" | "avatar_scale"
-  > | null;
-};
-
 type PersonSummary = {
   userId: string;
   name: string;
@@ -52,13 +60,14 @@ function monthStart(value: string) {
   return `${value.slice(0, 7)}-01`;
 }
 
+const monthFormatter = new Intl.DateTimeFormat("ja-JP", {
+  timeZone: "Asia/Tokyo",
+  year: "numeric",
+  month: "2-digit",
+});
+
 function monthKey(value: string) {
-  const formatter = new Intl.DateTimeFormat("ja-JP", {
-    timeZone: "Asia/Tokyo",
-    year: "numeric",
-    month: "2-digit",
-  });
-  const parts = formatter.formatToParts(new Date(value));
+  const parts = monthFormatter.formatToParts(new Date(value));
   const year = parts.find((part) => part.type === "year")?.value ?? "";
   const month = parts.find((part) => part.type === "month")?.value ?? "";
   return `${year}-${month}`;
@@ -69,90 +78,149 @@ function monthLabel(key: string) {
   return `${year}年${Number(month)}月`;
 }
 
-function nameForEvent(event: EventWithProfile) {
-  return event.profiles?.display_name || event.profiles?.email || "メンバー";
-}
-
 export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
   const [today] = useState(japanDateValue);
   const loadRequestId = useRef(0);
-  const [events, setEvents] = useState<EventWithProfile[]>([]);
+  const activeRequest = useRef<AbortController | null>(null);
+  const profileRequest = useRef<AbortController | null>(null);
+  const [events, setEvents] = useState<AnalyticsEvent[]>([]);
   const [adjustments, setAdjustments] = useState<AnalyticsAdjustment[]>([]);
   const [startDate, setStartDate] = useState(monthStart(today));
   const [endDate, setEndDate] = useState(today);
   const [draftStartDate, setDraftStartDate] = useState(monthStart(today));
   const [draftEndDate, setDraftEndDate] = useState(today);
-  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">(
+    "loading",
+  );
   const [message, setMessage] = useState<string | null>(null);
+  const [profileMessage, setProfileMessage] = useState<string | null>(null);
+  const loading = status === "loading";
+  const hasResult = status === "ready";
 
   const loadAnalytics = useCallback(async () => {
     const requestId = ++loadRequestId.current;
-    const client = getSupabase();
-    setLoading(true);
+    activeRequest.current?.abort();
+    profileRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    setStatus("loading");
     setMessage(null);
 
     const snapshotAt = new Date().toISOString();
     try {
-      const [nextEvents, nextAdjustments] = await Promise.all([
-        loadAllRows<AnalyticsEvent>((from, to) =>
-          client
-            .from("thank_you_events")
-            .select("id,user_id,created_at", from === 0 ? { count: "exact" } : {})
-            .eq("kind", "thank_you")
-            .lte("created_at", snapshotAt)
-            .order("created_at", { ascending: false })
-            .order("id", { ascending: false })
-            .range(from, to)
-            .returns<AnalyticsEvent[]>(),
-        ),
-        loadAllRows<AnalyticsAdjustment>((from, to) =>
-          client
-            .from("thank_you_adjustments")
-            .select("id,delta,created_at", from === 0 ? { count: "exact" } : {})
-            .lte("created_at", snapshotAt)
-            .order("created_at", { ascending: false })
-            .order("id", { ascending: false })
-            .range(from, to)
-            .returns<AnalyticsAdjustment[]>(),
-        ),
-      ]);
-
-      // Fetch avatars once per member instead of repeating them on every event.
-      const userIds = [...new Set(nextEvents.map((event) => event.user_id))];
-      const profiles = new Map<string, AnalyticsProfile>();
-      for (let offset = 0; offset < userIds.length; offset += 100) {
-        const batch = userIds.slice(offset, offset + 100);
-        const rows = await loadAllRows<AnalyticsProfile>((from, to) =>
-          client
-            .from("profiles")
-            .select("id,display_name,email,company_name,avatar_url,avatar_scale", from === 0 ? { count: "exact" } : {})
-            .in("id", batch)
-            .order("id")
-            .range(from, to)
-            .returns<AnalyticsProfile[]>(),
-        );
-        for (const profile of rows) profiles.set(profile.id, profile);
-      }
+      const client = getSupabase();
+      const [nextEvents, nextAdjustments] = await withRequestDeadline(
+        (signal) =>
+          Promise.all([
+            loadAllRows<AnalyticsEvent>((from, to) =>
+              client
+                .from("thank_you_events")
+                .select(
+                  "id,user_id,created_at",
+                  from === 0 ? { count: "exact" } : {},
+                )
+                .eq("kind", "thank_you")
+                .lte("created_at", snapshotAt)
+                .order("created_at", { ascending: false })
+                .order("id", { ascending: false })
+                .range(from, to)
+                .abortSignal(signal)
+                .returns<AnalyticsEvent[]>(),
+            ),
+            loadAllRows<AnalyticsAdjustment>((from, to) =>
+              client
+                .from("thank_you_adjustments")
+                .select(
+                  "id,delta,created_at",
+                  from === 0 ? { count: "exact" } : {},
+                )
+                .lte("created_at", snapshotAt)
+                .order("created_at", { ascending: false })
+                .order("id", { ascending: false })
+                .range(from, to)
+                .abortSignal(signal)
+                .returns<AnalyticsAdjustment[]>(),
+            ),
+          ]),
+        controller.signal,
+      );
 
       if (requestId !== loadRequestId.current) return;
-      setEvents(nextEvents.map((event) => ({
-        ...event,
-        profiles: profiles.get(event.user_id) ?? null,
-      })));
+      setEvents(nextEvents);
       setAdjustments(nextAdjustments);
-    } catch {
+      setStatus("ready");
+    } catch (error) {
       if (requestId !== loadRequestId.current) return;
-      setMessage("分析データを読み込めませんでした。更新ボタンで再試行してください。");
+      if (controller.signal.aborted) return;
+      setStatus("error");
+      setMessage(
+        error instanceof RequestTimeoutError
+          ? error.message
+          : "分析データを読み込めませんでした。更新ボタンで再試行してください。",
+      );
       setEvents([]);
       setAdjustments([]);
     } finally {
-      if (requestId === loadRequestId.current) setLoading(false);
+      if (activeRequest.current === controller) activeRequest.current = null;
     }
   }, []);
 
   useEffect(() => {
     void loadAnalytics();
+    return () => {
+      ++loadRequestId.current;
+      activeRequest.current?.abort();
+      profileRequest.current?.abort();
+    };
   }, [loadAnalytics]);
+
+  const eventUserIds = useMemo(
+    () => [...new Set(events.map((event) => event.user_id))],
+    [events],
+  );
+  const eventUserKey = eventUserIds.join(",");
+  const [profiles, setProfiles] = useState<Map<string, AnalyticsProfile>>(
+    new Map(),
+  );
+
+  useEffect(() => {
+    setProfileMessage(null);
+    if (section !== "person" || !hasResult || !eventUserIds.length) return;
+    const controller = new AbortController();
+    profileRequest.current = controller;
+    const client = getSupabase();
+    void withRequestDeadline(async (signal) => {
+      const nextProfiles = new Map<string, AnalyticsProfile>();
+      for (let offset = 0; offset < eventUserIds.length; offset += 100) {
+        const batch = eventUserIds.slice(offset, offset + 100);
+        const rows = await loadAllRows<AnalyticsProfile>((from, to) =>
+          client
+            .from("profiles")
+            .select(
+              "id,display_name,email,company_name,avatar_url,avatar_scale",
+              from === 0 ? { count: "exact" } : {},
+            )
+            .in("id", batch)
+            .order("id")
+            .range(from, to)
+            .abortSignal(signal)
+            .returns<AnalyticsProfile[]>(),
+        );
+        for (const profile of rows) nextProfiles.set(profile.id, profile);
+      }
+      return nextProfiles;
+    }, controller.signal)
+      .then((nextProfiles) => {
+        if (!controller.signal.aborted) setProfiles(nextProfiles);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted)
+          setProfileMessage(
+            "人物名・画像を読み込めませんでした。集計件数は取得済みです。更新ボタンで再試行してください。",
+          );
+      });
+    return () => controller.abort();
+  }, [section, hasResult, eventUserKey]);
 
   const monthlySummaries = useMemo(() => {
     const summaries = new Map<string, MonthlySummary>();
@@ -187,7 +255,10 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
   }, [adjustments, events]);
 
   const rangeSummary = useMemo(() => {
-    const { start, endExclusive, invalid } = analyticsDateRange(startDate, endDate);
+    const { start, endExclusive, invalid } = analyticsDateRange(
+      startDate,
+      endDate,
+    );
 
     if (invalid) {
       return {
@@ -217,30 +288,36 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
     };
   }, [adjustments, endDate, events, startDate]);
 
-  const allTimeTotal = monthlySummaries.reduce((sum, item) => sum + item.total, 0);
+  const allTimeTotal = monthlySummaries.reduce(
+    (sum, item) => sum + item.total,
+    0,
+  );
   const personSummaries = useMemo(() => {
     const { start, endExclusive } = analyticsDateRange(startDate, endDate);
     const summaries = new Map<string, PersonSummary>();
 
     for (const event of events) {
       const createdAt = new Date(event.created_at).getTime();
+      const profile = profiles.get(event.user_id);
       const current = summaries.get(event.user_id);
-      const base: PersonSummary =
-        current ??
-        {
-          userId: event.user_id,
-          name: nameForEvent(event),
-          email: event.profiles?.email ?? undefined,
-          companyName: event.profiles?.company_name ?? undefined,
-          avatarUrl: event.profiles?.avatar_url,
-          avatarScale: event.profiles?.avatar_scale,
-          total: 0,
-          rangeCount: 0,
-          latestAt: event.created_at,
-        };
+      const base: PersonSummary = current ?? {
+        userId: event.user_id,
+        name: profile?.display_name || profile?.email || "メンバー",
+        email: profile?.email ?? undefined,
+        companyName: profile?.company_name ?? undefined,
+        avatarUrl: profile?.avatar_url,
+        avatarScale: profile?.avatar_scale,
+        total: 0,
+        rangeCount: 0,
+        latestAt: event.created_at,
+      };
 
       base.total += 1;
-      if (!rangeSummary.invalid && createdAt >= start && createdAt < endExclusive) {
+      if (
+        !rangeSummary.invalid &&
+        createdAt >= start &&
+        createdAt < endExclusive
+      ) {
         base.rangeCount += 1;
       }
       if (event.created_at > base.latestAt) base.latestAt = event.created_at;
@@ -253,16 +330,22 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
         b.total - a.total ||
         b.latestAt.localeCompare(a.latestAt),
     );
-  }, [endDate, events, rangeSummary.invalid, startDate]);
+  }, [endDate, events, profiles, rangeSummary.invalid, startDate]);
 
-  const rangePersonCount = personSummaries.filter((person) => person.rangeCount > 0).length;
+  const rangePersonCount = personSummaries.filter(
+    (person) => person.rangeCount > 0,
+  ).length;
   const topPerson = personSummaries.find((person) => person.rangeCount > 0);
-  const maxRangeCount = Math.max(1, ...personSummaries.map((person) => person.rangeCount));
+  const maxRangeCount = Math.max(
+    1,
+    ...personSummaries.map((person) => person.rangeCount),
+  );
   const isPeriodSection = section === "period";
   const draftInvalid = analyticsDateRange(draftStartDate, draftEndDate).invalid;
   const rangeDirty = draftStartDate !== startDate || draftEndDate !== endDate;
 
   function applyDateRange() {
+    if (!hasResult) return;
     if (draftInvalid) {
       setMessage("終了日は開始日以降にしてください。");
       return;
@@ -287,15 +370,19 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
         </div>
         <button
           className="button button-secondary"
+          disabled={loading}
           onClick={() => void loadAnalytics()}
           type="button"
         >
           <RefreshCcw aria-hidden="true" />
-          更新
+          {loading ? "集計中..." : "更新"}
         </button>
       </header>
 
       {message ? <p className="notice error">{message}</p> : null}
+      {section === "person" && profileMessage ? (
+        <p className="notice error">{profileMessage}</p>
+      ) : null}
 
       <nav className="admin-tabs" aria-label="分析メニュー">
         <NavLink to="/analytics/period">
@@ -314,13 +401,17 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
             <>
               <BarChart3 aria-hidden="true" />
               <span>全期間合計</span>
-              <strong>{loading ? "-" : formatNumber(Math.max(0, allTimeTotal))}</strong>
+              <strong>
+                {hasResult ? formatNumber(Math.max(0, allTimeTotal)) : "-"}
+              </strong>
             </>
           ) : (
             <>
               <UserRound aria-hidden="true" />
               <span>分析対象人数</span>
-              <strong>{loading ? "-" : formatNumber(personSummaries.length)}</strong>
+              <strong>
+                {hasResult ? formatNumber(personSummaries.length) : "-"}
+              </strong>
             </>
           )}
         </article>
@@ -330,14 +421,20 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
               <CalendarDays aria-hidden="true" />
               <span>指定期間合計</span>
               <strong>
-                {loading || rangeSummary.invalid ? "-" : formatNumber(rangeSummary.total)}
+                {!hasResult || rangeSummary.invalid
+                  ? "-"
+                  : formatNumber(rangeSummary.total)}
               </strong>
             </>
           ) : (
             <>
               <BarChart3 aria-hidden="true" />
               <span>期間内トップ</span>
-              <strong>{loading || !topPerson ? "-" : formatNumber(topPerson.rangeCount)}</strong>
+              <strong>
+                {!hasResult || !topPerson
+                  ? "-"
+                  : formatNumber(topPerson.rangeCount)}
+              </strong>
             </>
           )}
         </article>
@@ -364,14 +461,18 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
           />
         </div>
         <div className="analytics-apply-row">
-          <p>
-            {rangeDirty
-              ? "日付を選択中です。適用すると下の数値が更新されます。"
-              : `${formatDateLabel(startDate)} から ${formatDateLabel(endDate)} で集計中です。`}
+          <p role="status" aria-live="polite">
+            {loading
+              ? "データを読み込んで集計しています..."
+              : !hasResult
+                ? "集計できませんでした。更新ボタンで再試行してください。"
+                : rangeDirty
+                  ? "日付を選択中です。適用すると下の数値が更新されます。"
+                  : `${formatDateLabel(startDate)} から ${formatDateLabel(endDate)} の集計が完了しました。`}
           </p>
           <button
             className="button button-primary"
-            disabled={draftInvalid || !rangeDirty}
+            disabled={!hasResult || draftInvalid || !rangeDirty}
             onClick={applyDateRange}
             type="button"
           >
@@ -388,23 +489,29 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
           >
             <div>
               <span>押下数</span>
-              <strong>{formatNumber(rangeSummary.eventCount)}</strong>
+              <strong>
+                {hasResult ? formatNumber(rangeSummary.eventCount) : "-"}
+              </strong>
             </div>
             <div>
               <span>補正</span>
               <strong>
-                {rangeSummary.adjustmentTotal > 0 ? "+" : ""}
-                {formatNumber(rangeSummary.adjustmentTotal)}
+                {hasResult && rangeSummary.adjustmentTotal > 0 ? "+" : ""}
+                {hasResult ? formatNumber(rangeSummary.adjustmentTotal) : "-"}
               </strong>
             </div>
             <div>
               <span>表示総数</span>
-              <strong>{formatNumber(rangeSummary.total)}</strong>
+              <strong>
+                {hasResult ? formatNumber(rangeSummary.total) : "-"}
+              </strong>
             </div>
             {!isPeriodSection ? (
               <div>
                 <span>対象人数</span>
-                <strong>{formatNumber(rangePersonCount)}</strong>
+                <strong>
+                  {hasResult ? formatNumber(rangePersonCount) : "-"}
+                </strong>
               </div>
             ) : null}
           </div>
@@ -422,12 +529,16 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
           </div>
           {loading ? (
             <p className="muted">読み込み中...</p>
+          ) : !hasResult ? (
+            <p className="muted">集計結果を取得できませんでした。</p>
           ) : monthlySummaries.length ? (
             <div className="monthly-list">
               {monthlySummaries.map((item) => {
                 const maxTotal = Math.max(
                   1,
-                  ...monthlySummaries.map((summary) => Math.max(0, summary.total)),
+                  ...monthlySummaries.map((summary) =>
+                    Math.max(0, summary.total),
+                  ),
                 );
                 const width = `${Math.max(4, (Math.max(0, item.total) / maxTotal) * 100)}%`;
                 return (
@@ -463,6 +574,8 @@ export function AnalyticsPage({ section }: { section: AnalyticsSection }) {
           </div>
           {loading ? (
             <p className="muted">読み込み中...</p>
+          ) : !hasResult ? (
+            <p className="muted">集計結果を取得できませんでした。</p>
           ) : personSummaries.length ? (
             <div className="people-list">
               {personSummaries.map((person) => {

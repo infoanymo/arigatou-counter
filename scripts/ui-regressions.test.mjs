@@ -40,7 +40,7 @@ before(async () => {
   bundleDir = await mkdtemp(resolve(tmpdir(), "okiari-ui-"));
   await esbuild.build({
     stdin: {
-      contents: `export {SettingsPage} from './src/pages/SettingsPage'; export {DashboardPage} from './src/pages/DashboardPage'; export {AdminPage} from './src/pages/AdminPage'; export {MemoryRouter} from 'react-router-dom';`,
+      contents: `export {SettingsPage} from './src/pages/SettingsPage'; export {DashboardPage} from './src/pages/DashboardPage'; export {AdminPage} from './src/pages/AdminPage'; export {AnalyticsPage} from './src/pages/AnalyticsPage'; export {MemoryRouter} from 'react-router-dom';`,
       resolveDir: process.cwd(),
       loader: "tsx",
     },
@@ -127,6 +127,9 @@ function fixture(tables = {}) {
     writes: [],
     channels: [],
     failPeriodSave: false,
+    queries: [],
+    stalledTables: new Set(),
+    failedTables: new Set(),
   };
   const client = {
     from(table) {
@@ -177,6 +180,9 @@ function fixture(tables = {}) {
         returns() {
           return query;
         },
+        abortSignal() {
+          return query;
+        },
         maybeSingle() {
           single = true;
           return query;
@@ -198,6 +204,9 @@ function fixture(tables = {}) {
         then(success, failure) {
           return Promise.resolve()
             .then(() => {
+              state.queries.push({table, from, to});
+              if (state.stalledTables.has(table)) return new Promise(() => {});
+              if (state.failedTables.has(table)) return {data:null, error:{message:'network error'}, count:null};
               let rows = (state.tables[table] ?? []).filter((row) =>
                 filters.every((filter) => filter(row)),
               );
@@ -489,4 +498,80 @@ test("reversed period dates are rejected before saving", async () => {
   assert.match(view.container.textContent, /終了日は開始日以降/);
   assert.equal(state.writes.length, 0);
   await view.close();
+});
+
+function analyticsFixtures() {
+  return {
+    thank_you_events: [
+      ...Array.from({length:1001}, (_,id) => ({id:`sep-${id}`,kind:'thank_you',user_id:'me',created_at:'2026-09-15T03:00:00Z'})),
+      ...Array.from({length:550}, (_,id) => ({id:`oct-${id}`,kind:'thank_you',user_id:'me',created_at:'2026-10-15T03:00:00Z'})),
+      {id:'post',kind:'community_post',user_id:'me',created_at:'2026-10-15T03:00:00Z'},
+    ],
+    thank_you_adjustments:[{id:'adjustment',delta:-3,created_at:'2026-10-15T03:00:00Z'}],
+  };
+}
+function totals(container) {
+  return [...container.querySelectorAll('[aria-label="分析サマリー"] strong')].map(node=>node.textContent);
+}
+
+test('period analytics completes without requesting profiles, and applies an older month correctly', async (t) => {
+  t.mock.timers.enable({apis:['Date'],now:new Date('2026-10-19T03:00:00Z')});
+  const state = fixture(analyticsFixtures());
+  state.stalledTables.add('profiles');
+  const view = await mount(pages.AnalyticsPage,{section:'period'});
+  t.after(()=>view.close());
+  assert.deepEqual(totals(view.container),['1,548','547']);
+  assert.match(view.container.querySelector('[role="status"]').textContent,/集計が完了/);
+  assert.equal(state.queries.some(query=>query.table==='profiles'),false);
+  assert.ok(state.queries.filter(query=>query.table==='thank_you_events').length > 1);
+  await click(view.container.querySelectorAll('.date-field')[0]);
+  await click(view.container.querySelector('[aria-label="前の月"]'));
+  await click([...view.container.querySelectorAll('.calendar-day:not(.outside)')].find(node=>node.textContent==='1'));
+  await click(view.container.querySelectorAll('.date-field')[1]);
+  await click(view.container.querySelector('[aria-label="前の月"]'));
+  await click([...view.container.querySelectorAll('.calendar-day:not(.outside)')].find(node=>node.textContent==='30'));
+  await click(button(view.container,'適用'));
+  assert.deepEqual(totals(view.container),['1,548','1,001']);
+  assert.match(view.container.querySelector('[role="status"]').textContent,/2026\/09\/01.*2026\/09\/30.*集計が完了/);
+});
+
+test('an analytics request that never settles times out, hides unknown totals, and can be retried', async (t) => {
+  t.mock.timers.enable({apis:['setTimeout','Date'],now:new Date('2026-10-19T03:00:00Z')});
+  const state=fixture(analyticsFixtures());
+  state.stalledTables.add('thank_you_events');
+  const view=await mount(pages.AnalyticsPage,{section:'period'});
+  t.after(()=>view.close());
+  assert.deepEqual(totals(view.container),['-','-']);
+  assert.equal(button(view.container,'集計中').disabled,true);
+  await act(async()=>t.mock.timers.tick(30_001));
+  await flush();
+  assert.match(view.container.querySelector('.notice').textContent,/取得に時間がかかっています/);
+  assert.deepEqual(totals(view.container),['-','-']);
+  assert.deepEqual([...view.container.querySelectorAll('[aria-label="指定期間の内訳"] strong')].map(node=>node.textContent),['-','-','-']);
+  assert.equal(button(view.container,'更新').disabled,false);
+  state.stalledTables.clear();
+  await click(button(view.container,'更新'));
+  assert.deepEqual(totals(view.container),['1,548','547']);
+  assert.match(view.container.querySelector('[role="status"]').textContent,/集計が完了/);
+});
+
+test('analytics query failure does not display a false zero or claim completion',async(t)=>{
+  const state=fixture();state.failedTables.add('thank_you_adjustments');
+  const view=await mount(pages.AnalyticsPage,{section:'period'});t.after(()=>view.close());
+  assert.deepEqual(totals(view.container),['-','-']);
+  assert.match(view.container.querySelector('[role="status"]').textContent,/集計できませんでした/);
+  state.failedTables.clear();await click(button(view.container,'更新'));
+  assert.deepEqual(totals(view.container),['0','0']);
+  assert.match(view.container.querySelector('[role="status"]').textContent,/集計が完了/);
+});
+
+test('person analytics keeps the measured totals even if profile loading never settles',async(t)=>{
+  t.mock.timers.enable({apis:['setTimeout','Date'],now:new Date('2026-10-19T03:00:00Z')});
+  const state=fixture(analyticsFixtures());state.stalledTables.add('profiles');
+  const view=await mount(pages.AnalyticsPage,{section:'person'});t.after(()=>view.close());
+  assert.deepEqual(totals(view.container),['1','550']);
+  assert.match(view.container.querySelector('[role="status"]').textContent,/集計が完了/);
+  await act(async()=>t.mock.timers.tick(30_001));await flush();
+  assert.match(view.container.querySelector('.notice').textContent,/集計件数は取得済み/);
+  assert.deepEqual(totals(view.container),['1','550']);
 });
